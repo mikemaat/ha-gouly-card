@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.8.0";
+const VERSION = "0.8.1";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -307,7 +307,9 @@ class GoulyCard extends HTMLElement {
     document.body.appendChild(this._backdrop);
     this._renderDialog();
     // Home Assistant loads more-info controls on demand; ask for the light one and use it.
-    if (await this._loadNativeControl()) this._renderDialog();
+    const loaded = await this._loadNativeControl();
+    this._logAvailability();
+    if (loaded) this._renderDialog();
   }
 
   /**
@@ -463,22 +465,31 @@ class GoulyCard extends HTMLElement {
             this._native = element;
             this._nativeCandidate = candidate;
             this._nativeChecked = true;
-            console.debug(`gouly-card: using Home Assistant's ${candidate.name}`);
+            console.info(`gouly-card: using Home Assistant's ${candidate.name}`);
             if (candidate.extras) this._renderExtras(dialog);
           } else {
             element.remove();
             GoulyCard.NATIVE = GoulyCard.NATIVE.filter((other) => other.name !== candidate.name);
-            console.debug(`gouly-card: ${candidate.name} rendered nothing here, trying the next control`);
+            console.info(`gouly-card: ${candidate.name} rendered nothing here, trying the next control`);
             this._renderLight(dialog);
           }
         }, 250);
         return;
       }
       this._nativeChecked = true;
-      console.debug("gouly-card: no Home Assistant light control available, using the card's own");
+      console.info("gouly-card: no Home Assistant light control available, using the card's own");
     }
 
     this._renderOwnControls(container);
+  }
+
+  /** What Home Assistant elements exist in this session; handy when something looks wrong. */
+  _logAvailability() {
+    const names = ["more-info-light", "ha-state-control-light-brightness", "ha-control-slider", "ha-hs-color-picker"];
+    console.info(
+      "gouly-card: available Home Assistant controls -",
+      names.map((name) => `${name}: ${customElements.get(name) ? "yes" : "no"}`).join(", ")
+    );
   }
 
   /** Power and colour buttons to go with a native control that only does brightness. */
