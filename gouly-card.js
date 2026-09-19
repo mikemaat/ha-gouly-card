@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.9.2";
+const VERSION = "0.9.3";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -352,13 +352,12 @@ class GoulyCard extends HTMLElement {
         /* the tile chunk is a nice-to-have */
       }
       await Promise.race([
-        Promise.all([
-          customElements.whenDefined("ha-more-info-info"),
-          customElements.whenDefined("ha-control-slider"),
-        ]),
-        new Promise((resolve) => setTimeout(resolve, 3000)),
+        customElements.whenDefined("ha-state-control-light-brightness"),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
       ]);
-      if (!customElements.get("ha-more-info-info")) await this._preloadMoreInfo();
+      // The light controls live in the more-info dialog's code, which only loads once such a
+      // dialog has been opened.
+      if (!customElements.get("ha-state-control-light-brightness")) await this._preloadMoreInfo();
     } catch (error) {
       return false;
     }
@@ -378,8 +377,8 @@ class GoulyCard extends HTMLElement {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fire(null);
     await Promise.race([
-      customElements.whenDefined("ha-more-info-info"),
-      new Promise((resolve) => setTimeout(resolve, 2000)),
+      customElements.whenDefined("ha-state-control-light-brightness"),
+      new Promise((resolve) => setTimeout(resolve, 4000)),
     ]);
   }
 
@@ -500,7 +499,10 @@ class GoulyCard extends HTMLElement {
         if (rendered) {
           this._native = element;
           this._nativeCandidate = candidate;
-          console.info(`gouly-card: using Home Assistant's ${candidate.name}`);
+          console.info(
+            `gouly-card: using Home Assistant's ${candidate.name}`,
+            `(hass ${element.hass ? "kept" : "LOST"}, ${element.shadowRoot?.childElementCount ?? 0} child nodes)`
+          );
           if (candidate.extras) this._renderExtras(dialog);
         } else {
           element.remove();
