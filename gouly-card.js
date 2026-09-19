@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "2.1.0";
+const VERSION = "2.2.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -77,12 +77,21 @@ const STYLES = `
   .speed .value { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 
   .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 16px 0; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
-  .tab {
-    flex: 1; padding: 8px; border-radius: 10px; border: none; cursor: pointer; font-size: 13px;
-    background: rgba(var(--rgb-primary-text-color, 255,255,255), .06); color: var(--primary-text-color);
+  /* Segmented control: a track with the selected segment raised out of it. */
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 20px; padding: 4px;
+    border-radius: 999px; background: var(--seg-track);
   }
-  .tab.active { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
+  .tab {
+    flex: 1; padding: 9px 16px; border-radius: 999px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 500; background: transparent; color: var(--secondary-text-color);
+    transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+  }
+  .tab:hover:not(.active) { color: var(--primary-text-color); }
+  .tab.active {
+    background: var(--seg-active-bg); color: var(--seg-active-fg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  }
 
   .list { display: flex; flex-direction: column; gap: 6px; }
   .item { display: flex; align-items: stretch; gap: 2px; }
@@ -105,7 +114,7 @@ const STYLES = `
     color: var(--primary-text-color); border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
   }
   select {
-    margin-bottom: 14px; cursor: pointer;
+    margin-bottom: 22px; cursor: pointer;
     /* room for the chevron, which otherwise sits tight against the edge */
     padding-right: 36px; appearance: none;
     background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
@@ -351,6 +360,7 @@ class GoulyCard extends HTMLElement {
       dialog.querySelector("#close").addEventListener("click", () => this._closeDialog());
     }
 
+    this._applyTheme(dialog);
     this._updateContext();
     this._renderLight(dialog);
     this._renderSpeed(dialog);
@@ -534,6 +544,17 @@ class GoulyCard extends HTMLElement {
       }
     });
     this._wireItems(dialog);
+  }
+
+  /**
+   * Colours that have to differ between light and dark: the segmented control's track and its
+   * selected segment, which is a raised light pill either way, as Home Assistant's own is.
+   */
+  _applyTheme(dialog) {
+    const dark = this._isDark(dialog);
+    dialog.style.setProperty("--seg-track", dark ? "rgba(255, 255, 255, .08)" : "rgba(0, 0, 0, .06)");
+    dialog.style.setProperty("--seg-active-bg", dark ? "rgba(255, 255, 255, .92)" : "#fff");
+    dialog.style.setProperty("--seg-active-fg", "#1c1c1e");
   }
 
   /** Whether the dialog is dark, from its own background colour. */
