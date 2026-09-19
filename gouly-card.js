@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -98,6 +98,14 @@ const STYLES = `
 `;
 
 const isPreset = (effect) => typeof effect === "string" && effect.includes(" / ");
+
+/**
+ * Favourites come from the integration's `favourite_presets` attribute, so they show here even
+ * when the light's effect list is set to leave presets out. Older versions only had them in the
+ * effect list.
+ */
+const favouritesOf = (light) =>
+  light.attributes.favourite_presets ?? (light.attributes.effect_list || []).filter(isPreset);
 
 /** Escape text before putting it in markup: preset names come from the device. */
 const esc = (value) =>
@@ -409,7 +417,7 @@ class GoulyCard extends HTMLElement {
       this._tab,
       this._search,
       light.attributes.effect,
-      light.attributes.effect_list?.filter(isPreset),
+      favouritesOf(light),
       folders?.state,
       folders?.attributes.options?.length,
       presets?.state,
@@ -419,10 +427,9 @@ class GoulyCard extends HTMLElement {
 
   _tabMarkup() {
     const light = this._light;
-    const effects = light.attributes.effect_list || [];
 
     if (this._tab === "favourites") {
-      const favourites = effects.filter(isPreset).sort((a, b) => a.localeCompare(b));
+      const favourites = [...favouritesOf(light)].sort((a, b) => a.localeCompare(b));
       if (!favourites.length) {
         return `<div class="empty">No favourites yet. Open <b>Presets</b> and tap the star on one.</div>`;
       }
@@ -450,7 +457,7 @@ class GoulyCard extends HTMLElement {
     const selected = presets.state && !["unknown", "unavailable"].includes(presets.state) ? presets.state : null;
     const options = presets.attributes.options || [];
     const matches = options.filter((option) => option.toLowerCase().includes(this._search.toLowerCase()));
-    const favourites = new Set(effects.filter(isPreset));
+    const favourites = new Set(favouritesOf(light));
     const dark = this._hass.themes?.darkMode;
     return `
       <select id="folder" style="color-scheme: ${dark ? "dark" : "light"}">
