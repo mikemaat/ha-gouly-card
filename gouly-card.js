@@ -58,12 +58,15 @@ const STYLES = `
   .close:hover { background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); }
   .body { overflow: auto; padding: 0 16px 20px; }
 
-  .speed { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--secondary-text-color); }
+  .speed {
+    display: flex; align-items: center; gap: 12px; margin-top: 8px;
+    font-size: 13px; color: var(--secondary-text-color);
+  }
   .speed input[type="range"] { flex: 1; accent-color: var(--primary-color, #03a9f4); }
   .speed .value { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 
   .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 16px 0; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
   .tab {
     flex: 1; padding: 8px; border-radius: 10px; border: none; cursor: pointer; font-size: 13px;
     background: rgba(var(--rgb-primary-text-color, 255,255,255), .06); color: var(--primary-text-color);
@@ -90,7 +93,16 @@ const STYLES = `
     background: rgba(var(--rgb-primary-text-color, 255,255,255), .06);
     color: var(--primary-text-color); border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
   }
-  select { margin-bottom: 8px; cursor: pointer; }
+  select {
+    margin-bottom: 14px; cursor: pointer;
+    /* room for the chevron, which otherwise sits tight against the edge */
+    padding-right: 36px; appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 20px) calc(50% + 2px), calc(100% - 14px) calc(50% + 2px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+  }
   input[type="search"] { margin-bottom: 10px; }
   input[type="search"]::placeholder { color: var(--secondary-text-color); }
   .hint { color: var(--secondary-text-color); font-size: 12px; margin-top: 10px; }
@@ -321,8 +333,8 @@ class GoulyCard extends HTMLElement {
         </header>
         <div class="body">
           <div id="light"></div>
-          <div class="divider"></div>
           <div id="speed"></div>
+          <div class="divider"></div>
           <div class="tabs"></div>
           <div id="tab-content"></div>
         </div>`;
@@ -458,9 +470,8 @@ class GoulyCard extends HTMLElement {
     const options = presets.attributes.options || [];
     const matches = options.filter((option) => option.toLowerCase().includes(this._search.toLowerCase()));
     const favourites = new Set(favouritesOf(light));
-    const dark = this._hass.themes?.darkMode;
     return `
-      <select id="folder" style="color-scheme: ${dark ? "dark" : "light"}">
+      <select id="folder">
         ${(folders.attributes.options || [])
           .map((option) => `<option ${option === folders.state ? "selected" : ""}>${esc(option)}</option>`)
           .join("")}
@@ -491,7 +502,13 @@ class GoulyCard extends HTMLElement {
   }
 
   _wire(dialog) {
-    dialog.querySelector("#folder")?.addEventListener("change", (event) => {
+    const folder = dialog.querySelector("#folder");
+    if (folder) {
+      // The dropdown list is drawn by the browser, which follows color-scheme, so take it from
+      // the dialog's actual background rather than guessing from the theme.
+      folder.style.colorScheme = this._isDark(dialog) ? "dark" : "light";
+    }
+    folder?.addEventListener("change", (event) => {
       this._search = "";
       this._call("select", "select_option", {
         entity_id: this._folderSelect.entity_id,
@@ -512,6 +529,17 @@ class GoulyCard extends HTMLElement {
       }
     });
     this._wireItems(dialog);
+  }
+
+  /** Whether the dialog is dark, from its own background colour. */
+  _isDark(dialog) {
+    const background = getComputedStyle(dialog).backgroundColor;
+    const [r, g, b] = (background.match(/\d+(\.\d+)?/g) || []).map(Number);
+    if ([r, g, b].some((value) => value === undefined)) {
+      return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
+    }
+    // Rec. 709 luma; below the midpoint counts as dark.
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
   }
 
   _wireItems(dialog) {
