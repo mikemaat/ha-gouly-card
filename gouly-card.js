@@ -12,7 +12,9 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
+
+const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
   ["Red", [255, 0, 0, 0]],
@@ -39,25 +41,16 @@ const STYLES = `
     padding: 12px; cursor: pointer;
   }
   .icon {
-    width: 40px; height: 40px; border-radius: 50%; flex: 0 0 40px;
-    display: grid; place-items: center; font-size: 18px;
+    width: 40px; height: 40px; border-radius: 50%; flex: 0 0 40px; padding: 0; border: none;
+    display: grid; place-items: center; cursor: pointer;
     background: rgba(var(--rgb-primary-text-color, 255,255,255), 0.05);
     color: var(--state-icon-color, #9e9e9e);
+    --mdc-icon-size: 22px;
   }
+  .icon:hover { filter: brightness(1.2); }
   .titles { flex: 1; min-width: 0; }
   .name { font-size: 15px; color: var(--primary-text-color); }
   .state { font-size: 13px; color: var(--secondary-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .toggle {
-    width: 44px; height: 26px; border-radius: 13px; border: none; cursor: pointer;
-    background: var(--switch-unchecked-track-color, #666); position: relative; flex: 0 0 auto;
-  }
-  .toggle.on { background: var(--primary-color, #03a9f4); }
-  .toggle::after {
-    content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
-    border-radius: 50%; background: #fff; transition: transform .15s;
-  }
-  .toggle.on::after { transform: translateX(18px); }
-
   .backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9999;
     display: grid; place-items: center; padding: 16px;
@@ -79,7 +72,7 @@ const STYLES = `
   /* Brightness slider, in the style of Home Assistant's own light controls. */
   .light-row { display: flex; align-items: stretch; gap: 8px; }
   .power {
-    width: 56px; border-radius: 14px; border: none; cursor: pointer; font-size: 20px;
+    width: 56px; border-radius: 14px; border: none; cursor: pointer; font-size: 20px; --mdc-icon-size: 24px;
     background: rgba(var(--rgb-primary-text-color, 255,255,255), .06); color: var(--primary-text-color);
   }
   .power.on { background: var(--light-color, #ffc107); color: #2b2b2b; }
@@ -246,18 +239,16 @@ class GoulyCard extends HTMLElement {
     const detail = on ? [light.attributes.effect, percent ? `${percent}%` : null].filter(Boolean).join(" · ") || "On" : "Off";
     const colour = on ? lightColour(light) : null;
 
+    const icon = this._config.icon || DEFAULT_ICON;
     root.innerHTML = `
       <div class="row" id="row">
-        <div class="icon" id="icon" style="${
+        <button class="icon" id="icon" aria-label="Toggle" style="${
           colour ? `background: rgba(${colour}, .25); color: rgb(${colour});` : ""
-        }">${on ? "☀" : "☾"}</div>
+        }"><ha-icon icon="${esc(icon)}"></ha-icon></button>
         <div class="titles"><div class="name">${esc(name)}</div><div class="state">${esc(detail)}</div></div>
-        <button class="toggle ${on ? "on" : ""}" id="toggle" aria-label="Toggle"></button>
       </div>`;
-    root.querySelector("#row").addEventListener("click", (event) => {
-      if (event.target.id !== "toggle") this._openDialog();
-    });
-    root.querySelector("#toggle").addEventListener("click", (event) => {
+    root.querySelector("#row").addEventListener("click", () => this._openDialog());
+    root.querySelector("#icon").addEventListener("click", (event) => {
       event.stopPropagation();
       this._call("light", "toggle", { entity_id: this._config.entity });
     });
@@ -316,7 +307,7 @@ class GoulyCard extends HTMLElement {
       <div class="body">
         <div class="section">
           <div class="light-row">
-            <button class="power ${on ? "on" : ""}" id="power" title="${on ? "Turn off" : "Turn on"}">⏻</button>
+            <button class="power ${on ? "on" : ""}" id="power" title="${on ? "Turn off" : "Turn on"}"><ha-icon icon="mdi:power"></ha-icon></button>
             <div class="slider ${on ? "" : "off"}" id="slider" role="slider" aria-valuenow="${percent}">
               <div class="fill" style="width: ${on ? percent : 0}%"></div>
               <div class="label">${on ? `${percent}%` : "Off"}</div>

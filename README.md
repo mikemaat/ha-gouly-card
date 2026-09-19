@@ -7,7 +7,8 @@ dashboard, with colour, brightness, effects, presets and favourites behind a sin
 
 ## What it does
 
-The row shows the light's name, what it's currently doing and a toggle. Tapping it opens a dialog with:
+The row shows the light's name and what it's currently doing. Tapping the icon toggles the light,
+tapping the rest opens a dialog with:
 
 - **Light**: on/off, brightness and colour swatches
 - **Favourites**: your favourite presets as one-tap buttons
@@ -45,6 +46,7 @@ entities from the same device.
 |---|---|---|
 | `entity` | required | The Gouly light |
 | `name` | the light's name | Title shown on the row and dialog |
+| `icon` | `mdi:snowflake` | Icon on the row; tap it to toggle the light |
 | `select_preset_folder` | found automatically | Preset folder select entity |
 | `select_preset` | found automatically | Preset select entity |
 | `number_effect_speed` | found automatically | Effect speed number entity |
