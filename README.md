@@ -14,7 +14,8 @@ dashboard, with colour, brightness, effects, presets and favourites behind a sin
 The row shows the light's name and what it's currently doing. Tapping the icon toggles the light,
 tapping the rest opens a dialog with:
 
-- **Light**: on/off, brightness and colour swatches
+- **Light**: Home Assistant's own light controls (the same slider, buttons and colour picker as the
+  standard more-info dialog)
 - **Favourites**: your favourite presets as one-tap buttons
 - **Effects**: all 140 effects with a search box and the effect speed slider
 - **Browse presets**: the folder list, a search box, and a button to add the current preset to favourites
