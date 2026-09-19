@@ -12,9 +12,11 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "5.0.0";
+const VERSION = "5.1.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
+// Below this width the dialog stacks, as Home Assistant does on a phone.
+const SIDE_BY_SIDE_WIDTH = 900;
 
 const STYLES = `
   #root { display: block; }
@@ -268,6 +270,7 @@ class GoulyCard extends HTMLElement {
         <div id="tab-content"></div>
       </div>`;
     container.appendChild(host);
+    this._sideBySide(dialog, container, host);
 
     // Home Assistant reuses the dialog for other entities: drop our section when it closes,
     // and when it is opened for something else.
@@ -278,7 +281,43 @@ class GoulyCard extends HTMLElement {
     this._renderDialog();
   }
 
+  /**
+   * On a wide screen, lay Home Assistant's dialog content out as two columns: its light controls
+   * on the left, our section on the right. Home Assistant reuses this dialog for other entities,
+   * so everything we change here is put back in _detach.
+   */
+  _sideBySide(dialog, container, host) {
+    if (window.innerWidth < SIDE_BY_SIDE_WIDTH) return;
+    const info = container.querySelector("ha-more-info-info");
+    const haDialog = dialog.shadowRoot.querySelector("ha-dialog");
+    this._restore = {
+      container: container.getAttribute("style"),
+      info: info?.getAttribute("style") ?? null,
+      haDialog: haDialog?.getAttribute("style") ?? null,
+      infoElement: info,
+      haDialogElement: haDialog,
+      containerElement: container,
+    };
+    Object.assign(container.style, { display: "flex", alignItems: "flex-start", gap: "8px" });
+    if (info) Object.assign(info.style, { flex: "0 0 340px", minWidth: "0" });
+    Object.assign(host.style, { flex: "1", minWidth: "0" });
+    haDialog?.style.setProperty("--mdc-dialog-min-width", "860px");
+    haDialog?.style.setProperty("--mdc-dialog-max-width", "900px");
+  }
+
   _detach() {
+    const restore = this._restore;
+    if (restore) {
+      const put = (element, style) => {
+        if (!element) return;
+        if (style === null) element.removeAttribute("style");
+        else element.setAttribute("style", style);
+      };
+      put(restore.containerElement, restore.container);
+      put(restore.infoElement, restore.info);
+      put(restore.haDialogElement, restore.haDialog);
+      this._restore = null;
+    }
     this._root?.host?.remove();
     this._root = null;
     this._tabsSignature = null;
