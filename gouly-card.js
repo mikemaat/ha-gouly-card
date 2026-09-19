@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -79,7 +79,7 @@ const STYLES = `
   .since { font-size: 13px; color: var(--secondary-text-color); margin-bottom: 20px; }
   .vslider {
     width: 130px; height: 300px; border-radius: 28px; position: relative; cursor: pointer;
-    background: rgba(var(--rgb-primary-text-color, 255,255,255), .08);
+    background: var(--light-track-color, rgba(var(--rgb-primary-text-color, 255,255,255), .08));
     overflow: hidden; touch-action: none; user-select: none;
   }
   .vslider .fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--light-color, #ffc107); }
@@ -97,11 +97,18 @@ const STYLES = `
     display: grid; place-items: center; --mdc-icon-size: 22px;
     background: transparent; color: var(--primary-text-color);
   }
-  .mode.active { background: var(--card-background-color, #1c1c1c); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
-  .mode.wheel::after {
-    content: ""; width: 22px; height: 22px; border-radius: 50%;
-    background: conic-gradient(#f44336, #ff9800, #ffeb3b, #4caf50, #00bcd4, #3f51b5, #9c27b0, #f44336);
+  .mode.active {
+    background: var(--primary-text-color, #fff);
+    color: var(--card-background-color, #1c1c1c);
   }
+  .mode.wheel::after {
+    content: ""; width: 24px; height: 24px; border-radius: 50%;
+    background:
+      radial-gradient(circle at center, #fff 0%, rgba(255,255,255,0) 70%),
+      conic-gradient(#f44336, #ff9800, #ffeb3b, #4caf50, #00bcd4, #3f51b5, #9c27b0, #f44336);
+  }
+  .mode.wheel.active { background: var(--primary-text-color, #fff); }
+  .colour { display: flex; justify-content: center; }
   .swatches { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; max-width: 280px; margin-top: 18px; }
   .swatch { width: 44px; height: 44px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0; }
   .swatch.selected { border-color: var(--primary-text-color); }
@@ -171,6 +178,21 @@ const lightColour = (light) => {
   }
   const rgb = light.attributes.rgb_color;
   return rgb ? rgb.join(",") : null;
+};
+
+/** Convert r,g,b to Home Assistant's [hue, saturation] pair. */
+const rgbToHs = ([r, g, b]) => {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  let hue = 0;
+  if (delta) {
+    if (max === r) hue = ((g - b) / delta) % 6;
+    else if (max === g) hue = (b - r) / delta + 2;
+    else hue = (r - g) / delta + 4;
+  }
+  hue = (hue * 60 + 360) % 360;
+  return [hue, max ? (delta / max) * 100 : 0];
 };
 
 class GoulyCard extends HTMLElement {
@@ -305,9 +327,29 @@ class GoulyCard extends HTMLElement {
     if (GoulyCard.NATIVE.some((candidate) => customElements.get(candidate.name))) return true;
     try {
       const helpers = await window.loadCardHelpers?.();
+      // The more-info controls, and the tile card, which is what defines ha-control-slider.
       helpers?.importMoreInfoControl?.("light");
+      try {
+        const tile = helpers?.createCardElement?.({
+          type: "tile",
+          entity: this._config.entity,
+          features: [{ type: "light-brightness" }],
+        });
+        if (tile) {
+          tile.hass = this._hass;
+          tile.style.display = "none";
+          document.body.appendChild(tile);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          tile.remove();
+        }
+      } catch (error) {
+        /* the tile chunk is a nice-to-have */
+      }
       await Promise.race([
-        customElements.whenDefined("more-info-light"),
+        Promise.all([
+          customElements.whenDefined("more-info-light"),
+          customElements.whenDefined("ha-control-slider"),
+        ]),
         new Promise((resolve) => setTimeout(resolve, 3000)),
       ]);
     } catch (error) {
@@ -386,7 +428,12 @@ class GoulyCard extends HTMLElement {
   _renderLight(dialog) {
     const container = dialog.querySelector("#light");
     const light = this._light;
-    container.style.setProperty("--light-color", `rgb(${lightColour(light) || "255,193,7"})`);
+    const rgb = lightColour(light) || "255,193,7";
+    container.style.setProperty("--light-color", `rgb(${rgb})`);
+    container.style.setProperty(
+      "--light-track-color",
+      light.state === "on" ? `rgba(${rgb}, .2)` : "rgba(var(--rgb-primary-text-color, 255,255,255), .08)"
+    );
 
     if (this._native && this._native.isConnected) {
       // Keep the element and just refresh it, so it doesn't flicker on every update.
@@ -455,9 +502,38 @@ class GoulyCard extends HTMLElement {
           </button>
           <button class="mode wheel ${this._colourMode ? "active" : ""}" id="mode-colour" title="Colour"></button>
         </div>
-        ${this._colourMode ? this._swatchMarkup(light) : ""}
+        <div class="colour"></div>
       </div>`;
     this._wireLightButtons(extras);
+    this._renderColourArea(extras);
+  }
+
+  /** Favourite colours, and Home Assistant's colour wheel when the colour tab is open. */
+  _renderColourArea(scope) {
+    const area = scope.querySelector(".colour");
+    if (!area) return;
+    area.innerHTML = "";
+    if (this._colourMode && this._renderColourWheel(area)) return;
+    const holder = document.createElement("div");
+    holder.innerHTML = this._swatchMarkup(this._light);
+    area.appendChild(holder.firstElementChild);
+    this._wireLightButtons(area);
+  }
+
+  /** Home Assistant's colour wheel, if that element is loaded. */
+  _renderColourWheel(container) {
+    if (!this._colourMode || !customElements.get("ha-hs-color-picker")) return false;
+    const wheel = document.createElement("ha-hs-color-picker");
+    const rgb = (lightColour(this._light) || "255,193,7").split(",").map(Number);
+    wheel.hass = this._hass;
+    wheel.value = rgbToHs(rgb);
+    wheel.style.maxWidth = "320px";
+    wheel.addEventListener("value-changed", (event) => {
+      const [hue, saturation] = event.detail.value;
+      this._call("light", "turn_on", { entity_id: this._config.entity, hs_color: [hue, saturation] });
+    });
+    container.appendChild(wheel);
+    return true;
   }
 
   _swatchMarkup(light) {
@@ -515,9 +591,10 @@ class GoulyCard extends HTMLElement {
           </button>
           <button class="mode wheel ${this._colourMode ? "active" : ""}" id="mode-colour" title="Colour"></button>
         </div>
-        ${this._colourMode ? this._swatchMarkup(light) : ""}
+        <div class="colour"></div>
       </div>`;
     this._wireLightButtons(container);
+    this._renderColourArea(container);
     this._wireSlider(container.querySelector("#slider"));
   }
 
