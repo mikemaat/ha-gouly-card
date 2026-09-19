@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.4.0";
+const VERSION = "3.5.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -26,13 +26,13 @@ const STYLES = `
 
   .backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9999;
-    display: grid; place-items: center; padding: 16px;
+    display: grid; place-items: center; padding: 8px;
     font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
   }
   .dialog {
     background: var(--ha-dialog-surface-background, var(--card-background-color, #1c1c1c));
     color: var(--primary-text-color);
-    border-radius: 28px; width: min(420px, 100%); max-height: min(90vh, 960px);
+    border-radius: 28px; width: min(420px, 100%); max-height: min(98vh, 1100px);
     display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 8px 32px rgba(0,0,0,.5);
   }
@@ -53,7 +53,7 @@ const STYLES = `
     .body { flex-direction: row; gap: 24px; overflow: hidden; padding-bottom: 24px; }
     .light-pane { flex: 0 0 360px; overflow: auto; }
     .extras-pane { flex: 1; overflow: auto; }
-    .light-pane, .extras-pane { max-height: calc(90vh - 130px); }
+    .light-pane, .extras-pane { max-height: calc(98vh - 130px); }
     .divider { width: 1px; height: auto; margin: 0; flex: 0 0 1px; }
   }
 
