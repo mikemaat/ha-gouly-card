@@ -16,6 +16,8 @@ icon toggles the light; tapping the rest opens a dialog with:
 
 - **Home Assistant's own light controls** - the same brightness slider, buttons, colour picker and
   effect list as the standard more-info dialog
+- **Favourite colours**, the ones saved against the light in Home Assistant (a default set is shown
+  if you haven't saved any)
 - **Effect speed** slider
 - **Favourites**: your favourite presets as one-tap buttons, sorted alphabetically
 - **Presets**: the Gouly app's library, with a folder dropdown, a search box, and a star on each

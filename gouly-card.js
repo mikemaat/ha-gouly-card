@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.0.1";
+const VERSION = "3.1.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -57,6 +57,12 @@ const STYLES = `
     .divider { width: 1px; height: auto; margin: 0; flex: 0 0 1px; }
   }
 
+  .colours { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 4px 0 12px; }
+  .colour {
+    width: 40px; height: 40px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+    padding: 0;
+  }
+  .colour:hover { transform: scale(1.06); }
   .speed {
     display: flex; align-items: center; gap: 12px; margin-top: 8px;
     font-size: 13px; color: var(--secondary-text-color);
@@ -123,6 +129,22 @@ const STYLES = `
   .hint { color: var(--secondary-text-color); font-size: 12px; margin-top: 10px; }
   .empty { color: var(--secondary-text-color); font-size: 13px; padding: 8px 0; }
 `;
+
+/** A favourite colour as CSS, for the swatch. */
+const cssColour = (colour) => {
+  if (colour.rgbw_color) {
+    const [r, g, b, w] = colour.rgbw_color;
+    return r || g || b ? `rgb(${r}, ${g}, ${b})` : `rgb(255, 214, 170)`;
+  }
+  if (colour.rgb_color) return `rgb(${colour.rgb_color.join(", ")})`;
+  if (colour.hs_color) return `hsl(${colour.hs_color[0]}, ${colour.hs_color[1]}%, 50%)`;
+  if (colour.color_temp_kelvin) {
+    // Warm to cool across the usual range, roughly.
+    const ratio = Math.min(1, Math.max(0, (colour.color_temp_kelvin - 2000) / 4500));
+    return `rgb(255, ${Math.round(180 + 60 * ratio)}, ${Math.round(107 + 148 * ratio)})`;
+  }
+  return "var(--secondary-text-color)";
+};
 
 /** Favourites, as published by the integration. */
 const favouritesOf = (light) => light.attributes.favourite_presets || [];
@@ -345,6 +367,7 @@ class GoulyCard extends HTMLElement {
         <div class="body">
           <div class="pane light-pane">
             <div id="light"></div>
+            <div id="colours"></div>
             <div id="speed"></div>
           </div>
           <div class="divider"></div>
@@ -361,6 +384,7 @@ class GoulyCard extends HTMLElement {
     this._applyTheme(dialog);
     this._updateContext();
     this._renderLight(dialog);
+    this._renderColours(dialog);
     this._renderSpeed(dialog);
     this._renderTabs(dialog);
   }
@@ -376,6 +400,46 @@ class GoulyCard extends HTMLElement {
     this._native.hass = this._hass;
     this._native.stateObj = this._light;
     this._native.entityId = this._config.entity;
+  }
+
+  /** Home Assistant's favourite colours for this light, from the entity registry. */
+  async _loadColours() {
+    if (this._colours) return;
+    this._colours = DEFAULT_COLOURS;
+    try {
+      const entry = await this._hass.callWS({
+        type: "config/entity_registry/get",
+        entity_id: this._config.entity,
+      });
+      const favourites = entry?.options?.light?.favorite_colors;
+      if (Array.isArray(favourites) && favourites.length) this._colours = favourites;
+    } catch (error) {
+      console.debug("gouly-card: no favourite colours from the registry", error);
+    }
+    if (this._backdrop) this._renderDialog();
+  }
+
+  _renderColours(dialog) {
+    const container = dialog.querySelector("#colours");
+    if (!this._colours) {
+      this._loadColours();
+      return;
+    }
+    if (container.dataset.filled) return;
+    container.dataset.filled = "1";
+    container.innerHTML = `<div class="colours">${this._colours
+      .map((colour, index) => `<button class="colour" data-colour="${index}" style="background: ${cssColour(
+        colour
+      )}"></button>`)
+      .join("")}</div>`;
+    container.querySelectorAll(".colour").forEach((button) =>
+      button.addEventListener("click", () =>
+        this._call("light", "turn_on", {
+          entity_id: this._config.entity,
+          ...this._colours[Number(button.dataset.colour)],
+        })
+      )
+    );
   }
 
   _renderSpeed(dialog) {
