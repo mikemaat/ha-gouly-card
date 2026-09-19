@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.9.0";
+const VERSION = "0.9.1";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -204,6 +204,7 @@ class GoulyCard extends HTMLElement {
     this._folderBrowse = false;
     this._colourMode = false;
     this._dragging = false;
+    this._rejected = new Set();
   }
 
   setConfig(config) {
@@ -413,6 +414,7 @@ class GoulyCard extends HTMLElement {
     this._backdrop?.remove();
     this._backdrop = null;
     this._native = null;
+    this._nativePending = false;
   }
 
   _renderDialog() {
@@ -458,12 +460,14 @@ class GoulyCard extends HTMLElement {
       light.state === "on" ? `rgba(${rgb}, .2)` : "rgba(var(--rgb-primary-text-color, 255,255,255), .08)"
     );
 
+    // A probe is in flight: leave it alone, or we orphan the element we are measuring.
+    if (this._nativePending) return;
+
     if (this._native && this._native.isConnected) {
-      // Keep the element and just refresh it, so it doesn't flicker on every update.
       if (this._nativeCandidate.generic) {
         if (!this._dragging) {
           this._native.value = light.state === "on" ? Math.round(((light.attributes.brightness || 0) / 255) * 100) : 0;
-          this._native.style.setProperty("--control-slider-color", `rgb(${lightColour(light) || "255,193,7"})`);
+          this._native.style.setProperty("--control-slider-color", `rgb(${rgb})`);
         }
       } else {
         this._native.hass = this._hass;
@@ -474,34 +478,39 @@ class GoulyCard extends HTMLElement {
       return;
     }
 
-    if (!this._nativeChecked) {
-      const candidates = GoulyCard.NATIVE.filter((candidate) => customElements.get(candidate.name));
-      if (candidates.length) {
-        container.innerHTML = "";
-        const candidate = candidates[0];
-        const element = this._buildNative(container, candidate);
-        // Lit renders asynchronously: give it a moment, then keep it only if it has a size.
-        setTimeout(() => {
-          if (!this._backdrop) return;
-          if (element.offsetHeight >= 40) {
-            this._native = element;
-            this._nativeCandidate = candidate;
-            this._nativeChecked = true;
-            console.info(`gouly-card: using Home Assistant's ${candidate.name}`);
-            if (candidate.extras) this._renderExtras(dialog);
-          } else {
-            element.remove();
-            GoulyCard.NATIVE = GoulyCard.NATIVE.filter((other) => other.name !== candidate.name);
-            console.info(`gouly-card: ${candidate.name} rendered nothing here, trying the next control`);
-            this._renderLight(dialog);
-          }
-        }, 250);
-        return;
-      }
-      this._nativeChecked = true;
-      console.info("gouly-card: no Home Assistant light control available, using the card's own");
+    const candidate = GoulyCard.NATIVE.find(
+      (option) => customElements.get(option.name) && !this._rejected.has(option.name)
+    );
+    if (candidate) {
+      this._nativePending = true;
+      container.innerHTML = "";
+      const element = this._buildNative(container, candidate);
+      // Lit renders asynchronously; wait for it to settle before deciding whether it worked.
+      const decide = () => {
+        this._nativePending = false;
+        if (!this._backdrop || !element.isConnected) return;
+        if (element.offsetHeight >= 40) {
+          this._native = element;
+          this._nativeCandidate = candidate;
+          console.info(`gouly-card: using Home Assistant's ${candidate.name}`);
+          if (candidate.extras) this._renderExtras(dialog);
+        } else {
+          element.remove();
+          this._rejected.add(candidate.name);
+          console.info(`gouly-card: ${candidate.name} rendered nothing here, trying the next control`);
+          this._renderLight(dialog);
+        }
+      };
+      (element.updateComplete || Promise.resolve()).then(() =>
+        requestAnimationFrame(() => setTimeout(decide, 200))
+      );
+      return;
     }
 
+    if (!this._noNativeLogged) {
+      this._noNativeLogged = true;
+      console.info("gouly-card: no Home Assistant light control available, using the card's own");
+    }
     this._renderOwnControls(container);
   }
 
