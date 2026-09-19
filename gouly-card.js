@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.0.0";
+const VERSION = "3.0.1";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -211,21 +211,16 @@ class GoulyCard extends HTMLElement {
         entity: this._config.entity,
         icon: this._config.icon || DEFAULT_ICON,
         name: this._config.name,
-        tap_action: { action: "none" },
-        icon_tap_action: { action: "none" },
+        // Let the tile do its own tap handling: a click listener misses most taps because it
+        // uses gesture detection. fire-dom-event is Home Assistant's hook for custom cards.
+        tap_action: { action: "fire-dom-event", gouly: "open" },
+        icon_tap_action: { action: "toggle" },
         hold_action: { action: "none" },
         double_tap_action: { action: "none" },
       });
       tile.hass = this._hass;
-      tile.addEventListener("click", (event) => {
-        const onIcon = event
-          .composedPath()
-          .some((node) => typeof node.localName === "string" && node.localName.includes("tile-icon"));
-        if (onIcon) {
-          this._call("light", "toggle", { entity_id: this._config.entity });
-        } else {
-          this._openDialog();
-        }
+      tile.addEventListener("ll-custom", (event) => {
+        if (event.detail?.gouly === "open") this._openDialog();
       });
       this._tile = tile;
       const root = this.shadowRoot.getElementById("root");
