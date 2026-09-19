@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.9.1";
+const VERSION = "0.9.2";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -205,6 +205,7 @@ class GoulyCard extends HTMLElement {
     this._colourMode = false;
     this._dragging = false;
     this._rejected = new Set();
+    this._nativeReady = false;
   }
 
   setConfig(config) {
@@ -308,9 +309,10 @@ class GoulyCard extends HTMLElement {
     document.body.appendChild(this._backdrop);
     this._renderDialog();
     // Home Assistant loads more-info controls on demand; ask for the light one and use it.
-    const loaded = await this._loadNativeControl();
+    await this._loadNativeControl();
     this._logAvailability();
-    if (loaded) this._renderDialog();
+    this._nativeReady = true;
+    this._renderDialog();
   }
 
   /**
@@ -321,9 +323,9 @@ class GoulyCard extends HTMLElement {
    * Whichever renders is used; `extras` says what the card must add around it.
    */
   static NATIVE = [
+    { name: "ha-state-control-light-brightness", extras: true },
     { name: "ha-more-info-info", extras: false, entityId: true },
     { name: "more-info-light", extras: false },
-    { name: "ha-state-control-light-brightness", extras: true },
     { name: "ha-control-slider", extras: true, generic: true },
   ];
 
@@ -462,6 +464,11 @@ class GoulyCard extends HTMLElement {
 
     // A probe is in flight: leave it alone, or we orphan the element we are measuring.
     if (this._nativePending) return;
+    // Until Home Assistant's controls have loaded, show ours rather than an empty space.
+    if (!this._nativeReady) {
+      this._renderOwnControls(container);
+      return;
+    }
 
     if (this._native && this._native.isConnected) {
       if (this._nativeCandidate.generic) {
@@ -489,7 +496,8 @@ class GoulyCard extends HTMLElement {
       const decide = () => {
         this._nativePending = false;
         if (!this._backdrop || !element.isConnected) return;
-        if (element.offsetHeight >= 40) {
+        const rendered = element.offsetHeight >= 40 && (element.shadowRoot?.childElementCount ?? 1) > 0;
+        if (rendered) {
           this._native = element;
           this._nativeCandidate = candidate;
           console.info(`gouly-card: using Home Assistant's ${candidate.name}`);
