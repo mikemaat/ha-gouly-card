@@ -13,13 +13,17 @@ dashboard, with colour, brightness, effects, presets and favourites behind a sin
 
 The row is Home Assistant's own tile card, so it matches the rest of your dashboard. Tapping the
 icon toggles the light; tapping the rest opens **Home Assistant's own more-info dialog** - the same
-one you get from any other light, with its header, history, settings, light controls and favourite
-colours - and the card adds its own section underneath:
+one every other light gives you, with its header, history, settings, light controls and favourite
+colours - and this card adds to it:
 
-- **Effect speed** slider
+- **Effect speed**, beside the light controls
 - **Favourites**: your favourite presets as one-tap buttons, sorted alphabetically
 - **Presets**: the Gouly app's library, with a folder menu, a search box, and a star on each preset
   to add or remove it from favourites
+
+From 900px wide the dialog is laid out in two columns and widened to 750px; narrower than that, and
+on a phone, it stacks. Everything the card changes about the dialog is put back when it closes,
+since Home Assistant reuses that dialog for every entity.
 
 It drives the entities the integration already creates, so there's nothing extra to configure.
 

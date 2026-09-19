@@ -1,7 +1,10 @@
 /**
- * Gouly Card - a compact row for a Gouly lighting controller. Tap the icon to toggle it, tap
- * the row to open a dialog with Home Assistant's own light controls, plus favourite presets
- * and the Gouly app's preset library.
+ * Gouly Card - a light row that opens Home Assistant's own more-info dialog, with the Gouly
+ * preset library added to it.
+ *
+ * The row is Home Assistant's tile card and the dialog is Home Assistant's more-info dialog;
+ * this card adds an effect speed slider, favourite presets and the preset library, and on a
+ * wide screen lays the dialog out in two columns.
  *
  * Uses the entities created by the ha-gouly integration:
  *   light.*                   the light
@@ -12,36 +15,31 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "5.6.0";
+const VERSION = "6.0.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
-// Below this width the dialog stacks, as Home Assistant does on a phone.
-const SIDE_BY_SIDE_WIDTH = 900;
-const SIDE_BY_SIDE_DIALOG_WIDTH = 940;
+
+// Below this viewport width the dialog stacks, as it does on a phone.
+const SPLIT_FROM = 900;
+// Home Assistant's dialog is 580px; this is what it widens to when split.
+const SPLIT_DIALOG_WIDTH = 750;
+const LIGHT_COLUMN_WIDTH = 320;
 
 const STYLES = `
-  #root { display: block; }
-  .error {
-    padding: 16px; border-radius: var(--ha-card-border-radius, 12px);
-    background: var(--ha-card-background, var(--card-background-color, #1c1c1c));
-    color: var(--secondary-text-color); font-size: 14px;
-  }
-
-  :host, .content { display: block; }
   .content { padding: 0 24px 24px; }
   .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 8px 0 16px; }
-  /* Side by side, the columns are the separation; a rule across the top just looks odd. */
+  /* Side by side, the columns separate things; a rule across the top just looks odd. */
   .content.wide .divider { display: none; }
-  .content.wide { padding-top: 8px; }
+  .content.wide { padding: 0; }
+
   .speed {
-    display: flex; align-items: center; gap: 12px; margin-top: 8px; padding-right: 6px;
+    display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; padding-right: 6px;
     font-size: 13px; color: var(--secondary-text-color);
   }
   .speed input[type="range"] { flex: 1; accent-color: var(--primary-color, #03a9f4); }
   .speed .value { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 
-  .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 16px 0; }
-  /* Segmented control: a track with the selected segment raised out of it. */
+  /* Segmented control, like Home Assistant's own mode buttons. */
   .tabs {
     display: flex; gap: 4px; margin-bottom: 20px; padding: 4px;
     border-radius: 999px; background: var(--seg-track);
@@ -49,13 +47,10 @@ const STYLES = `
   .tab {
     flex: 1; padding: 9px 16px; border-radius: 999px; border: none; cursor: pointer;
     font-size: 14px; font-weight: 500; background: transparent; color: var(--secondary-text-color);
-    transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+    transition: background .18s ease, color .18s ease;
   }
   .tab:hover:not(.active) { color: var(--primary-text-color); }
-  .tab.active {
-    background: var(--seg-active-bg); color: var(--seg-active-fg);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
-  }
+  .tab.active { background: var(--seg-active-bg); color: var(--seg-active-fg); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 
   .list { display: flex; flex-direction: column; gap: 6px; }
   .item { display: flex; align-items: stretch; gap: 2px; }
@@ -72,14 +67,7 @@ const STYLES = `
   }
   .item .star.on { color: #ffc107; }
 
-  input[type="search"] {
-    width: 100%; padding: 12px; border-radius: 10px; font-size: 14px; box-sizing: border-box;
-    background: rgba(var(--rgb-primary-text-color, 255,255,255), .06);
-    color: var(--primary-text-color); border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
-  }
-
-  /* Our own dropdown: a native select's list is drawn by the browser and can't be given a
-     radius or dark background. */
+  /* Our own folder menu: a native select's list is drawn by the browser and can't be styled. */
   .picker { position: relative; margin-bottom: 22px; }
   .picker-button {
     width: 100%; display: flex; align-items: center; gap: 8px; cursor: pointer;
@@ -95,7 +83,7 @@ const STYLES = `
     max-height: 320px; overflow: auto; padding: 8px; border-radius: 14px;
     background: var(--card-background-color, #1c1c1c);
     border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+    box-shadow: 0 8px 24px rgba(0,0,0,.45);
   }
   .picker-menu[hidden] { display: none; }
   .picker-item {
@@ -105,17 +93,27 @@ const STYLES = `
   }
   .picker-item:hover { background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); }
   .picker-item.selected { color: var(--primary-color, #03a9f4); font-weight: 500; }
+
   .search { position: relative; margin-bottom: 10px; }
   .search ha-icon {
     position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
     color: var(--secondary-text-color); --mdc-icon-size: 20px; pointer-events: none;
   }
-  .search input[type="search"] { padding-left: 40px; }
+  input[type="search"] {
+    width: 100%; padding: 12px 12px 12px 40px; border-radius: 10px; font-size: 14px; box-sizing: border-box;
+    background: rgba(var(--rgb-primary-text-color, 255,255,255), .06);
+    color: var(--primary-text-color); border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
+  }
   input[type="search"]::placeholder { color: var(--secondary-text-color); }
-  /* Chrome draws its own clear button; keep it out of the way of our icon. */
   input[type="search"]::-webkit-search-cancel-button { margin-left: 8px; }
+
   .hint { color: var(--secondary-text-color); font-size: 12px; margin-top: 10px; }
   .empty { color: var(--secondary-text-color); font-size: 13px; padding: 8px 0; }
+  .error {
+    padding: 16px; border-radius: var(--ha-card-border-radius, 12px);
+    background: var(--ha-card-background, var(--card-background-color, #1c1c1c));
+    color: var(--secondary-text-color); font-size: 14px;
+  }
 `;
 
 /** Favourites, as published by the integration. */
@@ -130,13 +128,23 @@ const esc = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+/** Find a descendant by tag name, crossing shadow roots. */
+const deepFind = (node, localName, depth = 0) => {
+  if (!node || depth > 6) return null;
+  if (node.localName === localName) return node;
+  for (const child of [...(node.shadowRoot?.children ?? []), ...(node.children ?? [])]) {
+    const hit = deepFind(child, localName, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+};
+
 class GoulyCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
     this._tab = "favourites";
     this._search = "";
-    this._contextSubscribers = new Set();
   }
 
   setConfig(config) {
@@ -159,7 +167,7 @@ class GoulyCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     this._renderRow();
-    if (this._root) this._renderDialog();
+    if (this._root) this._render();
   }
 
   // ---- entities -------------------------------------------------------------------
@@ -190,11 +198,7 @@ class GoulyCard extends HTMLElement {
 
   // ---- the dashboard row ----------------------------------------------------------
 
-  /**
-   * The row is Home Assistant's own tile card, so it matches every other tile on the
-   * dashboard. Its own actions are turned off: tapping the icon toggles the light, tapping
-   * anywhere else opens this card's dialog.
-   */
+  /** Home Assistant's own tile card, so the row matches the rest of the dashboard. */
   async _ensureTile() {
     if (this._tile || this._tilePending) return;
     this._tilePending = true;
@@ -205,8 +209,7 @@ class GoulyCard extends HTMLElement {
         entity: this._config.entity,
         icon: this._config.icon || DEFAULT_ICON,
         name: this._config.name,
-        // Let the tile do its own tap handling: a click listener misses most taps because it
-        // uses gesture detection. fire-dom-event is Home Assistant's hook for custom cards.
+        // The tile detects taps itself; fire-dom-event is how it tells us about one.
         tap_action: { action: "fire-dom-event", gouly: "open" },
         icon_tap_action: { action: "toggle" },
         hold_action: { action: "none" },
@@ -231,29 +234,27 @@ class GoulyCard extends HTMLElement {
 
   _renderRow() {
     if (!this._config || !this._hass) return;
-    if (!this._tile) {
-      this._ensureTile();
-      return;
-    }
-    this._tile.hass = this._hass;
+    if (!this._tile) this._ensureTile();
+    else this._tile.hass = this._hass;
   }
 
-  // ---- Home Assistant's more-info dialog, with our section added ------------------
+  // ---- Home Assistant's dialog, with our section added ----------------------------
 
-  /** Open Home Assistant's own dialog for this light, then add our part to it. */
+  /** Open Home Assistant's own more-info dialog, then add our part to it. */
   _openDialog() {
-    const entityId = this._config.entity;
     document.querySelector("home-assistant")?.dispatchEvent(
-      new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true })
+      new CustomEvent("hass-more-info", {
+        detail: { entityId: this._config.entity },
+        bubbles: true,
+        composed: true,
+      })
     );
     this._attach();
   }
 
-  /** The dialog is created asynchronously, so look for it for a moment. */
-  async _attach(attempt = 0) {
-    const dialog = document
-      .querySelector("home-assistant")
-      ?.shadowRoot?.querySelector(MORE_INFO_DIALOG);
+  /** The dialog is built asynchronously, so look for it for a moment. */
+  _attach(attempt = 0) {
+    const dialog = document.querySelector("home-assistant")?.shadowRoot?.querySelector(MORE_INFO_DIALOG);
     const container = dialog?.shadowRoot?.querySelector(".content");
     if (!container) {
       if (attempt < 40) setTimeout(() => this._attach(attempt + 1), 50);
@@ -262,161 +263,113 @@ class GoulyCard extends HTMLElement {
     }
     if (container.querySelector(".gouly-extras")) return;
 
-    const speedHost = document.createElement("div");
-    speedHost.className = "gouly-speed";
-    this._speedRoot = speedHost.attachShadow({ mode: "open" });
-    this._speedRoot.innerHTML = `<style>${STYLES}</style><div class="content"><div id="speed"></div></div>`;
+    // Two shadow roots: the speed belongs with the light controls, the rest is our section.
+    this._speedRoot = this._makeHost(container, "gouly-speed", `<div id="speed"></div>`);
+    this._presetsRoot = this._makeHost(
+      container,
+      "gouly-extras",
+      `<div class="divider"></div><div class="tabs"></div><div id="tab-content"></div>`
+    );
+    this._root = this._presetsRoot;
 
-    const host = document.createElement("div");
-    host.className = "gouly-extras";
-    this._root = host.attachShadow({ mode: "open" });
-    this._root.innerHTML = `
-      <style>${STYLES}</style>
-      <div class="content">
-        <div class="divider"></div>
-        <div class="tabs"></div>
-        <div id="tab-content"></div>
-      </div>`;
-
-    container.appendChild(speedHost);
-    container.appendChild(host);
-    this._sideBySide(dialog, container, host, speedHost);
-
-    // Home Assistant reuses the dialog for other entities: drop our section when it closes,
-    // and when it is opened for something else.
+    this._split(dialog, container);
     dialog.addEventListener("dialog-closed", () => this._detach(), { once: true });
-    dialog.shadowRoot.querySelector("ha-dialog")?.addEventListener("closed", () => this._detach(), {
-      once: true,
-    });
-    this._renderDialog();
+    this._render();
+  }
+
+  _makeHost(container, className, inner) {
+    const host = document.createElement("div");
+    host.className = className;
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>${STYLES}</style><div class="content">${inner}</div>`;
+    container.appendChild(host);
+    return root;
   }
 
   /**
-   * On a wide screen, lay Home Assistant's dialog content out as two columns: its light controls
-   * on the left, our section on the right. Home Assistant reuses this dialog for other entities,
-   * so everything we change here is put back in _detach.
+   * On a wide screen, lay the dialog out in two columns: Home Assistant's light controls and the
+   * speed slider on the left, our presets on the right, in a wider dialog.
+   *
+   * The dialog belongs to Home Assistant and is reused for other entities, so everything changed
+   * here is recorded and put back in _detach.
    */
-  /**
-   * Everything that might carry the dialog's width: the dialog elements above the content, and
-   * the dialog elements and surfaces inside their shadow roots. Home Assistant has moved this
-   * between ha-dialog, ha-md-dialog and ha-adaptive-dialog, at different depths, so collect
-   * whatever is there rather than naming one.
-   */
-  _findDialogElements(container) {
-    const chain = [];
-    const found = new Set();
-
-    const descend = (element, depth) => {
-      if (!element || depth > 4) return;
-      found.add(element);
-      const inner = element.shadowRoot?.querySelectorAll(
-        "ha-md-dialog, ha-dialog, ha-adaptive-dialog, dialog, .mdc-dialog__surface, .container, .surface"
-      );
-      inner?.forEach((child) => descend(child, depth + 1));
-    };
-
-    let node = container;
-    while (node) {
-      if (node.localName) {
-        chain.push(node.localName);
-        if (/dialog$/.test(node.localName)) descend(node, 0);
-      }
-      node = node.parentElement || node.parentNode?.host || node.getRootNode?.()?.host;
-    }
-    console.info("gouly-card: dialog chain:", chain.join(" < "));
-    return [...found];
-  }
-
-  _sideBySide(dialog, container, host, speedHost) {
-    if (window.innerWidth < SIDE_BY_SIDE_WIDTH) return;
+  _split(dialog, container) {
+    if (window.innerWidth < SPLIT_FROM) return;
     const info = container.querySelector("ha-more-info-info");
     if (!info) return;
 
-    // A column for Home Assistant's light controls with the effect speed under them, and our
-    // presets beside it.
     const left = document.createElement("div");
-    left.className = "gouly-left";
-    left.style.cssText = "flex: 0 0 340px; min-width: 0;";
+    left.style.cssText = `flex: 0 0 ${LIGHT_COLUMN_WIDTH}px; min-width: 0;`;
     container.insertBefore(left, info);
-    left.appendChild(info);
-    left.appendChild(speedHost);
+    left.append(info, this._speedRoot.host);
 
     this._restore = {
-      containerElement: container,
-      container: container.getAttribute("style"),
-      infoElement: info,
-      info: info.getAttribute("style"),
+      container: [container, container.getAttribute("style")],
+      info: [info, info.getAttribute("style")],
       left,
     };
     Object.assign(container.style, { display: "flex", alignItems: "flex-start", gap: "16px" });
-    Object.assign(host.style, { flex: "1", minWidth: "0" });
-    host.shadowRoot?.querySelector(".content")?.classList.add("wide");
+    Object.assign(this._presetsRoot.host.style, { flex: "1", minWidth: "0" });
+    this._presetsRoot.querySelector(".content").classList.add("wide");
 
-    // Home Assistant pins this dialog at 580px, so widen everything above the content that
-    // might carry the width, and record each one to put back on close.
-    const width = Math.min(SIDE_BY_SIDE_DIALOG_WIDTH, window.innerWidth - 32);
-    const widened = this._findDialogElements(container);
-    this._restore.widened = widened.map((element) => [element, element.getAttribute("style")]);
-    const before = widened.map((element) => Math.round(element.getBoundingClientRect().width));
-    widened.forEach((element) => {
-      Object.assign(element.style, { width: `${width}px`, maxWidth: `${width}px`, minWidth: `${width}px` });
-      element.style.setProperty("--mdc-dialog-min-width", `${width}px`);
-      element.style.setProperty("--mdc-dialog-max-width", `${width}px`);
-      element.style.setProperty("--dialog-surface-width", `${width}px`);
-      element.style.setProperty("--ha-dialog-surface-width", `${width}px`);
-    });
-    requestAnimationFrame(() => {
-      const report = widened.map(
-        (element, index) =>
-          `${element.localName || "." + element.className}: ${before[index]} -> ${Math.round(
-            element.getBoundingClientRect().width
-          )}`
-      );
-      console.info(
-        `gouly-card: asked for ${width}px; content is ${Math.round(
-          container.getBoundingClientRect().width
-        )}px wide.`,
-        report.join(" | ") || "nothing to set"
-      );
-    });
+    // The sheet's width comes from a custom property on the Web Awesome dialog that Home
+    // Assistant renders it in; setting a width on the elements themselves does nothing.
+    const wa = deepFind(dialog, "wa-dialog");
+    if (wa) {
+      this._restore.wa = [wa, wa.getAttribute("style")];
+      wa.style.setProperty("--width", `${SPLIT_DIALOG_WIDTH}px`);
+    } else {
+      console.warn("gouly-card: couldn't find the dialog element to widen");
+    }
   }
 
   _detach() {
     const restore = this._restore;
     if (restore) {
-      const put = (element, style) => {
-        if (!element) return;
+      const [info] = restore.info;
+      restore.container[0].insertBefore(info, restore.left);
+      restore.left.remove();
+      [restore.container, restore.info, restore.wa].forEach((entry) => {
+        if (!entry) return;
+        const [element, style] = entry;
         if (style === null) element.removeAttribute("style");
         else element.setAttribute("style", style);
-      };
-      // Put Home Assistant's light controls back where they were before the column wrapper.
-      if (restore.left && restore.infoElement) {
-        restore.containerElement.insertBefore(restore.infoElement, restore.left);
-        restore.left.remove();
-      }
-      put(restore.containerElement, restore.container);
-      put(restore.infoElement, restore.info);
-      restore.widened?.forEach(([element, style]) => put(element, style));
+      });
       this._restore = null;
     }
-    this._root?.host?.remove();
     this._speedRoot?.host?.remove();
-    this._root = null;
-    this._speedRoot = null;
-    this._tabsSignature = null;
+    this._presetsRoot?.host?.remove();
+    this._speedRoot = this._presetsRoot = this._root = null;
+    this._signatureCache = null;
   }
 
-  _renderDialog() {
+  _render() {
     if (!this._root || !this._light) return;
-    const dialog = this._root.querySelector(".content");
-    this._applyTheme(dialog);
-    if (this._speedRoot) this._renderSpeed(this._speedRoot);
-    this._renderTabs(dialog);
+    this._applyTheme();
+    this._renderSpeed();
+    this._renderTabs();
   }
 
-  _renderSpeed(dialog) {
+  /** The segmented control's colours, which differ between light and dark themes. */
+  _applyTheme() {
+    const background = getComputedStyle(document.documentElement)
+      .getPropertyValue("--card-background-color")
+      .trim();
+    const [r, g, b] = (background.match(/\d+(\.\d+)?/g) || []).map(Number);
+    const dark =
+      [r, g, b].some((value) => value === undefined)
+        ? window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true
+        : (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+    const content = this._root.querySelector(".content");
+    content.style.setProperty("--seg-track", dark ? "rgba(255, 255, 255, .08)" : "rgba(0, 0, 0, .06)");
+    content.style.setProperty("--seg-active-bg", dark ? "rgba(255, 255, 255, .92)" : "#fff");
+    content.style.setProperty("--seg-active-fg", "#1c1c1e");
+  }
+
+  _renderSpeed() {
     const speed = this._speed;
-    const container = dialog.querySelector("#speed");
+    const container = this._speedRoot?.querySelector("#speed");
+    if (!container) return;
     if (!speed) {
       container.innerHTML = "";
       return;
@@ -434,9 +387,11 @@ class GoulyCard extends HTMLElement {
     );
   }
 
-  _renderTabs(dialog) {
-    const tabs = dialog.querySelector(".tabs");
-    if (!tabs.dataset.tab || tabs.dataset.tab !== this._tab) {
+  // ---- favourites and presets -----------------------------------------------------
+
+  _renderTabs() {
+    const tabs = this._root.querySelector(".tabs");
+    if (tabs.dataset.tab !== this._tab) {
       tabs.dataset.tab = this._tab;
       tabs.innerHTML = [
         ["favourites", "Favourites"],
@@ -448,22 +403,23 @@ class GoulyCard extends HTMLElement {
         tab.addEventListener("click", () => {
           this._tab = tab.dataset.tab;
           this._search = "";
-          this._renderDialog();
+          this._render();
         })
       );
     }
 
-    // Only rebuild the list when something it shows has changed, so open dropdowns and
-    // half typed searches survive state updates.
-    const content = dialog.querySelector("#tab-content");
+    // Only rebuild the list when what it shows has changed, so an open menu or a half typed
+    // search isn't thrown away by an unrelated state update.
     const signature = this._signature();
-    if (signature === this._tabsSignature) return;
-    this._tabsSignature = signature;
+    if (signature === this._signatureCache) return;
+    this._signatureCache = signature;
 
+    const content = this._root.querySelector("#tab-content");
     const active = content.querySelector("input[type=search]");
-    const caret = active && active === document.activeElement ? [active.selectionStart, active.selectionEnd] : null;
+    const caret =
+      active && active === this._root.activeElement ? [active.selectionStart, active.selectionEnd] : null;
     content.innerHTML = this._tabMarkup();
-    this._wire(dialog);
+    this._wire();
     if (caret) {
       const search = content.querySelector("input[type=search]");
       search?.focus();
@@ -472,13 +428,12 @@ class GoulyCard extends HTMLElement {
   }
 
   _signature() {
-    const light = this._light;
     const folders = this._folderSelect;
     const presets = this._presetSelect;
     return JSON.stringify([
       this._tab,
       this._search,
-      favouritesOf(light),
+      favouritesOf(this._light),
       folders?.state,
       folders?.attributes.options?.length,
       presets?.state,
@@ -487,19 +442,17 @@ class GoulyCard extends HTMLElement {
   }
 
   _tabMarkup() {
-    const light = this._light;
-
     if (this._tab === "favourites") {
-      const favourites = [...favouritesOf(light)].sort((a, b) => a.localeCompare(b));
+      const favourites = [...favouritesOf(this._light)].sort((a, b) => a.localeCompare(b));
       if (!favourites.length) {
         return `<div class="empty">No favourites yet. Open <b>Presets</b> and tap the star on one.</div>`;
       }
       return `<div class="list">${favourites
         .map(
-          (effect) => `
+          (preset) => `
           <div class="item">
-            <button class="label" data-favourite="${esc(effect)}">${esc(effect)}</button>
-            <button class="star on" data-unstar="${esc(effect)}" title="Remove from favourites">
+            <button class="label" data-favourite="${esc(preset)}">${esc(preset)}</button>
+            <button class="star on" data-unstar="${esc(preset)}" title="Remove from favourites">
               <ha-icon icon="mdi:star"></ha-icon>
             </button>
           </div>`
@@ -516,7 +469,7 @@ class GoulyCard extends HTMLElement {
     const selected = presets.state && !["unknown", "unavailable"].includes(presets.state) ? presets.state : null;
     const options = presets.attributes.options || [];
     const matches = options.filter((option) => option.toLowerCase().includes(this._search.toLowerCase()));
-    const favourites = new Set(favouritesOf(light));
+    const favourites = new Set(favouritesOf(this._light));
     return `
       <div class="picker">
         <button class="picker-button" id="folder-button">
@@ -536,23 +489,21 @@ class GoulyCard extends HTMLElement {
       </div>
       <div class="search">
         <ha-icon icon="mdi:magnify"></ha-icon>
-        <input type="search" id="search" placeholder="Search ${options.length} presets" value="${esc(
-        this._search
-      )}">
+        <input type="search" id="search" placeholder="Search ${options.length} presets" value="${esc(this._search)}">
       </div>
       ${
         matches.length
           ? `<div class="list">${matches
               .map((option) => {
-                const effect = `${folders.state} / ${option}`;
-                const starred = favourites.has(effect);
+                const preset = `${folders.state} / ${option}`;
+                const starred = favourites.has(preset);
                 return `
                   <div class="item">
                     <button class="label ${option === selected ? "active" : ""}" data-preset="${esc(option)}">${esc(
                   option
                 )}</button>
                     <button class="star ${starred ? "on" : ""}" data-${starred ? "unstar" : "star"}="${esc(
-                  effect
+                  preset
                 )}" title="${starred ? "Remove from favourites" : "Add to favourites"}">
                       <ha-icon icon="${starred ? "mdi:star" : "mdi:star-outline"}"></ha-icon>
                     </button>
@@ -564,91 +515,62 @@ class GoulyCard extends HTMLElement {
       }`;
   }
 
-  _wire(dialog) {
-    const button = dialog.querySelector("#folder-button");
-    const menu = dialog.querySelector("#folder-menu");
+  _wire() {
+    const root = this._root;
+    const button = root.querySelector("#folder-button");
+    const menu = root.querySelector("#folder-menu");
     if (button && menu) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         menu.hidden = !menu.hidden;
         if (!menu.hidden) menu.querySelector(".selected")?.scrollIntoView({ block: "center" });
       });
-      menu.querySelectorAll("[data-folder]").forEach((item) =>
-        item.addEventListener("click", () => {
-          menu.hidden = true;
-          this._search = "";
-          this._call("select", "select_option", {
-            entity_id: this._folderSelect.entity_id,
-            option: item.dataset.folder,
-          });
-        })
-      );
-      // Anywhere else in the dialog closes it.
-      dialog.addEventListener("click", () => {
+      root.querySelector(".content").addEventListener("click", () => {
         menu.hidden = true;
       });
     }
-    dialog.querySelector("#search")?.addEventListener("input", (event) => {
+    root.querySelector("#search")?.addEventListener("input", (event) => {
       this._search = event.target.value;
-      const content = dialog.querySelector("#tab-content");
-      const list = content.querySelector(".list, .empty");
+      // Replace just the list, so focus and caret stay put while typing.
+      const list = root.querySelector(".list, .empty");
       const markup = document.createElement("div");
       markup.innerHTML = this._tabMarkup();
       const replacement = markup.querySelector(".list, .empty");
       if (list && replacement) {
-        this._tabsSignature = this._signature();
+        this._signatureCache = this._signature();
         list.replaceWith(replacement);
-        this._wireItems(dialog);
+        this._wireItems();
       }
     });
-    this._wireItems(dialog);
+    this._wireItems();
   }
 
-  /**
-   * Colours that have to differ between light and dark: the segmented control's track and its
-   * selected segment, which is a raised light pill either way, as Home Assistant's own is.
-   */
-  _applyTheme(dialog) {
-    const dark = this._isDark(dialog);
-    dialog.style.setProperty("--seg-track", dark ? "rgba(255, 255, 255, .08)" : "rgba(0, 0, 0, .06)");
-    dialog.style.setProperty("--seg-active-bg", dark ? "rgba(255, 255, 255, .92)" : "#fff");
-    dialog.style.setProperty("--seg-active-fg", "#1c1c1e");
-  }
+  _wireItems() {
+    const root = this._root;
+    const on = (selector, handler) =>
+      root.querySelectorAll(selector).forEach((item) => item.addEventListener("click", () => handler(item)));
 
-  /** Whether the dialog is dark, from its own background colour. */
-  _isDark(dialog) {
-    const background = getComputedStyle(dialog).backgroundColor;
-    const [r, g, b] = (background.match(/\d+(\.\d+)?/g) || []).map(Number);
-    if ([r, g, b].some((value) => value === undefined)) {
-      return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
-    }
-    // Rec. 709 luma; below the midpoint counts as dark.
-    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
-  }
-
-  _wireItems(dialog) {
-    dialog.querySelectorAll("[data-favourite]").forEach((item) =>
-      item.addEventListener("click", () =>
-        this._call("gouly", "apply_preset", { entity_id: this._config.entity, preset: item.dataset.favourite })
-      )
+    on("[data-favourite]", (item) =>
+      this._call("gouly", "apply_preset", { entity_id: this._config.entity, preset: item.dataset.favourite })
     );
-    dialog.querySelectorAll("[data-preset]").forEach((item) =>
-      item.addEventListener("click", () =>
-        this._call("select", "select_option", {
-          entity_id: this._presetSelect.entity_id,
-          option: item.dataset.preset,
-        })
-      )
+    on("[data-preset]", (item) =>
+      this._call("select", "select_option", {
+        entity_id: this._presetSelect.entity_id,
+        option: item.dataset.preset,
+      })
     );
-    dialog.querySelectorAll("[data-star]").forEach((item) =>
-      item.addEventListener("click", () =>
-        this._call("gouly", "add_favourite", { entity_id: this._config.entity, preset: item.dataset.star })
-      )
+    on("[data-folder]", (item) => {
+      this._search = "";
+      this._call("select", "select_option", {
+        entity_id: this._folderSelect.entity_id,
+        option: item.dataset.folder,
+      });
+    });
+    on("[data-star]", (item) =>
+      this._call("gouly", "add_favourite", { entity_id: this._config.entity, preset: item.dataset.star })
     );
-    dialog.querySelectorAll("[data-unstar]").forEach((item) =>
-      item.addEventListener("click", () =>
-        this._call("gouly", "remove_favourite", { entity_id: this._config.entity, preset: item.dataset.unstar })
-      )
+    on("[data-unstar]", (item) =>
+      this._call("gouly", "remove_favourite", { entity_id: this._config.entity, preset: item.dataset.unstar })
     );
   }
 }
@@ -659,7 +581,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "gouly-card",
   name: "Gouly Light",
-  description: "A Gouly light with its presets and favourites behind one tap.",
+  description: "A Gouly light with its presets and favourites in Home Assistant's own dialog.",
   preview: false,
   documentationURL: "https://github.com/mikemaat/ha-gouly-card",
 });
