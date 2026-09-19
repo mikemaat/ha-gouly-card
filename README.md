@@ -14,11 +14,12 @@ dashboard, with colour, brightness, effects, presets and favourites behind a sin
 The row shows the light's name and what it's currently doing. Tapping the icon toggles the light,
 tapping the rest opens a dialog with:
 
-- **Light**: Home Assistant's own light controls (the same slider, buttons and colour picker as the
-  standard more-info dialog), or the card's own equivalent if that control can't be embedded
+- **Home Assistant's own light controls** - the same brightness slider, buttons, colour picker and
+  effect list as the standard more-info dialog
+- **Effect speed** slider
 - **Favourites**: your favourite presets as one-tap buttons, sorted alphabetically
-- **Effects**: all 140 effects with a search box and the effect speed slider
-- **Browse presets**: the folder list, a search box, and a button to add the current preset to favourites
+- **Presets**: the Gouly app's library, with a folder dropdown, a search box, and a star on each
+  preset to add or remove it from favourites
 
 It drives the entities the integration already creates, so there's nothing extra to configure.
 
