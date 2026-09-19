@@ -15,8 +15,8 @@ The row shows the light's name and what it's currently doing. Tapping the icon t
 tapping the rest opens a dialog with:
 
 - **Light**: Home Assistant's own light controls (the same slider, buttons and colour picker as the
-  standard more-info dialog)
-- **Favourites**: your favourite presets as one-tap buttons
+  standard more-info dialog), or the card's own equivalent if that control can't be embedded
+- **Favourites**: your favourite presets as one-tap buttons, sorted alphabetically
 - **Effects**: all 140 effects with a search box and the effect speed slider
 - **Browse presets**: the folder list, a search box, and a button to add the current preset to favourites
 

@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -288,8 +288,14 @@ class GoulyCard extends HTMLElement {
     if (await this._loadNativeControl()) this._renderDialog();
   }
 
+  /** The name Home Assistant uses for its light more-info control, if it is loaded. */
+  _nativeName() {
+    if (this._nativeFailed) return null;
+    return ["more-info-light", "ha-more-info-light"].find((name) => customElements.get(name)) || null;
+  }
+
   async _loadNativeControl() {
-    if (customElements.get("more-info-light")) return true;
+    if (this._nativeName()) return true;
     try {
       const helpers = await window.loadCardHelpers?.();
       helpers?.importMoreInfoControl?.("light");
@@ -300,7 +306,7 @@ class GoulyCard extends HTMLElement {
     } catch (error) {
       return false;
     }
-    return Boolean(customElements.get("more-info-light"));
+    return Boolean(this._nativeName());
   }
 
   _closeDialog() {
@@ -347,11 +353,21 @@ class GoulyCard extends HTMLElement {
     const container = dialog.querySelector("#light");
     const light = this._light;
 
-    if (customElements.get("more-info-light")) {
+    const nativeName = this._nativeName();
+    if (nativeName) {
       if (!this._native || this._native.parentElement !== container) {
         container.innerHTML = "";
-        this._native = document.createElement("more-info-light");
+        this._native = document.createElement(nativeName);
         container.appendChild(this._native);
+        // It can load yet render nothing inside a dialog that isn't Home Assistant's own;
+        // if that happens, use our own controls instead.
+        setTimeout(() => {
+          if (this._native && this._native.offsetHeight < 40) {
+            this._nativeFailed = true;
+            this._native = null;
+            if (this._backdrop) this._renderDialog();
+          }
+        }, 250);
       }
       this._native.hass = this._hass;
       this._native.stateObj = light;
@@ -466,23 +482,17 @@ class GoulyCard extends HTMLElement {
     const effects = light.attributes.effect_list || [];
 
     if (this._tab === "favourites") {
-      const favourites = effects.filter(isPreset);
+      const favourites = effects.filter(isPreset).sort((a, b) => a.localeCompare(b));
       if (!favourites.length) {
         return `<div class="empty">No favourites yet. Open <b>Presets</b> and tap the star on one.</div>`;
       }
       return `<div class="list">${favourites
         .map(
-          (effect, index) => `
+          (effect) => `
           <div class="item">
             <button class="label ${effect === light.attributes.effect ? "active" : ""}" data-effect="${esc(
             effect
           )}">${esc(effect)}</button>
-            <button class="side" data-move-up="${esc(effect)}" ${index === 0 ? "disabled" : ""} title="Move up">
-              <ha-icon icon="mdi:chevron-up"></ha-icon>
-            </button>
-            <button class="side" data-move-down="${esc(effect)}" ${
-            index === favourites.length - 1 ? "disabled" : ""
-          } title="Move down"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
             <button class="side star" data-unstar="${esc(effect)}" title="Remove from favourites">
               <ha-icon icon="mdi:star"></ha-icon>
             </button>
@@ -636,21 +646,6 @@ class GoulyCard extends HTMLElement {
         this._call("gouly", "remove_favourite", { entity_id: this._config.entity, preset: item.dataset.unstar })
       )
     );
-    dialog.querySelectorAll("[data-move-up]").forEach((item) =>
-      item.addEventListener("click", () => this._move(item.dataset.moveUp, -1))
-    );
-    dialog.querySelectorAll("[data-move-down]").forEach((item) =>
-      item.addEventListener("click", () => this._move(item.dataset.moveDown, 1))
-    );
-  }
-
-  _move(effect, direction) {
-    const favourites = (this._light.attributes.effect_list || []).filter(isPreset);
-    const index = favourites.indexOf(effect);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= favourites.length) return;
-    favourites.splice(target, 0, ...favourites.splice(index, 1));
-    this._call("gouly", "set_favourites", { entity_id: this._config.entity, presets: favourites });
   }
 
   /** Vertical brightness slider: drag anywhere on it, like Home Assistant's. */
