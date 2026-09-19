@@ -12,11 +12,12 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "5.2.0";
+const VERSION = "5.3.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 // Below this width the dialog stacks, as Home Assistant does on a phone.
 const SIDE_BY_SIDE_WIDTH = 900;
+const SIDE_BY_SIDE_DIALOG_WIDTH = 940;
 
 const STYLES = `
   #root { display: block; }
@@ -29,6 +30,9 @@ const STYLES = `
   :host, .content { display: block; }
   .content { padding: 0 24px 24px; }
   .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 8px 0 16px; }
+  /* Side by side, the columns are the separation; a rule across the top just looks odd. */
+  .content.wide .divider { display: none; }
+  .content.wide { padding-top: 8px; }
   .speed {
     display: flex; align-items: center; gap: 12px; margin-top: 8px; padding-right: 6px;
     font-size: 13px; color: var(--secondary-text-color);
@@ -316,10 +320,21 @@ class GoulyCard extends HTMLElement {
       haDialog: haDialog?.getAttribute("style") ?? null,
       left,
     };
-    Object.assign(container.style, { display: "flex", alignItems: "flex-start", gap: "8px" });
+    Object.assign(container.style, { display: "flex", alignItems: "flex-start", gap: "16px" });
     Object.assign(host.style, { flex: "1", minWidth: "0" });
-    haDialog?.style.setProperty("--mdc-dialog-min-width", "860px");
-    haDialog?.style.setProperty("--mdc-dialog-max-width", "900px");
+    host.shadowRoot?.querySelector(".content")?.classList.add("wide");
+
+    // Home Assistant pins this dialog at 580px, so widen it: the custom properties for the
+    // usual case, and the surface itself, which is what actually carries the width.
+    const width = Math.min(SIDE_BY_SIDE_DIALOG_WIDTH, window.innerWidth - 32);
+    haDialog?.style.setProperty("--mdc-dialog-min-width", `${width}px`);
+    haDialog?.style.setProperty("--mdc-dialog-max-width", `${width}px`);
+    const surface = haDialog?.shadowRoot?.querySelector(".mdc-dialog__surface");
+    if (surface) {
+      this._restore.surfaceElement = surface;
+      this._restore.surface = surface.getAttribute("style");
+      Object.assign(surface.style, { width: `${width}px`, maxWidth: `${width}px` });
+    }
   }
 
   _detach() {
@@ -338,6 +353,7 @@ class GoulyCard extends HTMLElement {
       put(restore.containerElement, restore.container);
       put(restore.infoElement, restore.info);
       put(restore.haDialogElement, restore.haDialog);
+      put(restore.surfaceElement, restore.surface);
       this._restore = null;
     }
     this._root?.host?.remove();
