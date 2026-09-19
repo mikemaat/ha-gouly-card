@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -288,14 +288,21 @@ class GoulyCard extends HTMLElement {
     if (await this._loadNativeControl()) this._renderDialog();
   }
 
-  /** The name Home Assistant uses for its light more-info control, if it is loaded. */
-  _nativeName() {
-    if (this._nativeFailed) return null;
-    return ["more-info-light", "ha-more-info-light"].find((name) => customElements.get(name)) || null;
-  }
+  /**
+   * Home Assistant's own light controls, best first:
+   *   more-info-light                    the whole more-info view (slider, buttons, colour)
+   *   ha-state-control-light-brightness  just the big slider from that view
+   *   ha-control-slider                  the generic slider the tile card uses
+   * Whichever renders is used; `extras` says what the card must add around it.
+   */
+  static NATIVE = [
+    { name: "more-info-light", extras: false },
+    { name: "ha-state-control-light-brightness", extras: true },
+    { name: "ha-control-slider", extras: true, generic: true },
+  ];
 
   async _loadNativeControl() {
-    if (this._nativeName()) return true;
+    if (GoulyCard.NATIVE.some((candidate) => customElements.get(candidate.name))) return true;
     try {
       const helpers = await window.loadCardHelpers?.();
       helpers?.importMoreInfoControl?.("light");
@@ -306,7 +313,34 @@ class GoulyCard extends HTMLElement {
     } catch (error) {
       return false;
     }
-    return Boolean(this._nativeName());
+    return GoulyCard.NATIVE.some((candidate) => customElements.get(candidate.name));
+  }
+
+  /** Build a native control and check it actually rendered something. */
+  _buildNative(container, candidate) {
+    const element = document.createElement(candidate.name);
+    if (candidate.generic) {
+      const percent = Math.round(((this._light.attributes.brightness || 0) / 255) * 100);
+      element.vertical = true;
+      element.mode = "end";
+      element.min = 1;
+      element.max = 100;
+      element.value = this._light.state === "on" ? percent : 0;
+      element.style.setProperty("--control-slider-color", `rgb(${lightColour(this._light) || "255,193,7"})`);
+      element.style.setProperty("--control-slider-thickness", "130px");
+      element.style.height = "300px";
+      element.addEventListener("value-changed", (event) => {
+        const value = event.detail?.value;
+        if (value != null) {
+          this._call("light", "turn_on", { entity_id: this._config.entity, brightness_pct: Math.max(1, value) });
+        }
+      });
+    } else {
+      element.hass = this._hass;
+      element.stateObj = this._light;
+    }
+    container.appendChild(element);
+    return element;
   }
 
   _closeDialog() {
@@ -348,38 +382,122 @@ class GoulyCard extends HTMLElement {
     this._renderTabs(dialog);
   }
 
-  /** Home Assistant's own light controls when available, our own slider otherwise. */
+  /** Home Assistant's own light controls when they work here, the card's own otherwise. */
   _renderLight(dialog) {
     const container = dialog.querySelector("#light");
     const light = this._light;
+    container.style.setProperty("--light-color", `rgb(${lightColour(light) || "255,193,7"})`);
 
-    const nativeName = this._nativeName();
-    if (nativeName) {
-      if (!this._native || this._native.parentElement !== container) {
-        container.innerHTML = "";
-        this._native = document.createElement(nativeName);
-        container.appendChild(this._native);
-        // It can load yet render nothing inside a dialog that isn't Home Assistant's own;
-        // if that happens, use our own controls instead.
-        setTimeout(() => {
-          if (this._native && this._native.offsetHeight < 40) {
-            this._nativeFailed = true;
-            this._native = null;
-            if (this._backdrop) this._renderDialog();
-          }
-        }, 250);
+    if (this._native && this._native.isConnected) {
+      // Keep the element and just refresh it, so it doesn't flicker on every update.
+      if (this._nativeCandidate.generic) {
+        if (!this._dragging) {
+          this._native.value = light.state === "on" ? Math.round(((light.attributes.brightness || 0) / 255) * 100) : 0;
+          this._native.style.setProperty("--control-slider-color", `rgb(${lightColour(light) || "255,193,7"})`);
+        }
+      } else {
+        this._native.hass = this._hass;
+        this._native.stateObj = light;
       }
-      this._native.hass = this._hass;
-      this._native.stateObj = light;
+      if (this._nativeCandidate.extras) this._renderExtras(dialog);
       return;
     }
 
-    // Fallback: our own slider, in the same shape.
+    if (!this._nativeChecked) {
+      const candidates = GoulyCard.NATIVE.filter((candidate) => customElements.get(candidate.name));
+      if (candidates.length) {
+        container.innerHTML = "";
+        const candidate = candidates[0];
+        const element = this._buildNative(container, candidate);
+        // Lit renders asynchronously: give it a moment, then keep it only if it has a size.
+        setTimeout(() => {
+          if (!this._backdrop) return;
+          if (element.offsetHeight >= 40) {
+            this._native = element;
+            this._nativeCandidate = candidate;
+            this._nativeChecked = true;
+            console.debug(`gouly-card: using Home Assistant's ${candidate.name}`);
+            if (candidate.extras) this._renderExtras(dialog);
+          } else {
+            element.remove();
+            GoulyCard.NATIVE = GoulyCard.NATIVE.filter((other) => other.name !== candidate.name);
+            console.debug(`gouly-card: ${candidate.name} rendered nothing here, trying the next control`);
+            this._renderLight(dialog);
+          }
+        }, 250);
+        return;
+      }
+      this._nativeChecked = true;
+      console.debug("gouly-card: no Home Assistant light control available, using the card's own");
+    }
+
+    this._renderOwnControls(container);
+  }
+
+  /** Power and colour buttons to go with a native control that only does brightness. */
+  _renderExtras(dialog) {
+    const light = this._light;
+    const on = light.state === "on";
+    let extras = dialog.querySelector("#light-extras");
+    if (!extras) {
+      extras = document.createElement("div");
+      extras.id = "light-extras";
+      dialog.querySelector("#light").appendChild(extras);
+    }
+    extras.innerHTML = `
+      <div class="light">
+        <div class="modes">
+          <button class="mode" id="power" title="${on ? "Turn off" : "Turn on"}">
+            <ha-icon icon="mdi:power"></ha-icon>
+          </button>
+          <button class="mode ${this._colourMode ? "" : "active"}" id="mode-brightness" title="Brightness">
+            <ha-icon icon="mdi:brightness-6"></ha-icon>
+          </button>
+          <button class="mode wheel ${this._colourMode ? "active" : ""}" id="mode-colour" title="Colour"></button>
+        </div>
+        ${this._colourMode ? this._swatchMarkup(light) : ""}
+      </div>`;
+    this._wireLightButtons(extras);
+  }
+
+  _swatchMarkup(light) {
+    return `<div class="swatches">${SWATCHES.map(([label, rgbw]) => {
+      const shown = rgbw[3] ? "255,214,170" : `${rgbw[0]},${rgbw[1]},${rgbw[2]}`;
+      const selected = (light.attributes.rgbw_color || []).join(",") === rgbw.join(",");
+      return `<button class="swatch ${selected ? "selected" : ""}" title="${esc(label)}" data-rgbw="${rgbw.join(
+        ","
+      )}" style="background: rgb(${shown})"></button>`;
+    }).join("")}</div>`;
+  }
+
+  _wireLightButtons(scope) {
+    scope.querySelector("#power")?.addEventListener("click", () =>
+      this._call("light", "toggle", { entity_id: this._config.entity })
+    );
+    scope.querySelector("#mode-brightness")?.addEventListener("click", () => {
+      this._colourMode = false;
+      this._renderDialog();
+    });
+    scope.querySelector("#mode-colour")?.addEventListener("click", () => {
+      this._colourMode = true;
+      this._renderDialog();
+    });
+    scope.querySelectorAll(".swatch").forEach((swatch) =>
+      swatch.addEventListener("click", () =>
+        this._call("light", "turn_on", {
+          entity_id: this._config.entity,
+          rgbw_color: swatch.dataset.rgbw.split(",").map(Number),
+        })
+      )
+    );
+  }
+
+  /** The card's own controls, used when none of Home Assistant's render here. */
+  _renderOwnControls(container) {
+    if (this._dragging) return;
+    const light = this._light;
     const on = light.state === "on";
     const percent = Math.round(((light.attributes.brightness || 0) / 255) * 100);
-    const colour = lightColour(light) || "255,193,7";
-    container.style.setProperty("--light-color", `rgb(${colour})`);
-    if (this._dragging) return;
     container.innerHTML = `
       <div class="light">
         <div class="percent">${on ? `${percent}%` : "Off"}</div>
@@ -397,37 +515,9 @@ class GoulyCard extends HTMLElement {
           </button>
           <button class="mode wheel ${this._colourMode ? "active" : ""}" id="mode-colour" title="Colour"></button>
         </div>
-        ${
-          this._colourMode
-            ? `<div class="swatches">${SWATCHES.map(([label, rgbw]) => {
-                const shown = rgbw[3] ? "255,214,170" : `${rgbw[0]},${rgbw[1]},${rgbw[2]}`;
-                const selected = (light.attributes.rgbw_color || []).join(",") === rgbw.join(",");
-                return `<button class="swatch ${selected ? "selected" : ""}" title="${esc(label)}" data-rgbw="${rgbw.join(
-                  ","
-                )}" style="background: rgb(${shown})"></button>`;
-              }).join("")}</div>`
-            : ""
-        }
+        ${this._colourMode ? this._swatchMarkup(light) : ""}
       </div>`;
-    container.querySelector("#power").addEventListener("click", () =>
-      this._call("light", "toggle", { entity_id: this._config.entity })
-    );
-    container.querySelector("#mode-brightness").addEventListener("click", () => {
-      this._colourMode = false;
-      this._renderDialog();
-    });
-    container.querySelector("#mode-colour").addEventListener("click", () => {
-      this._colourMode = true;
-      this._renderDialog();
-    });
-    container.querySelectorAll(".swatch").forEach((swatch) =>
-      swatch.addEventListener("click", () =>
-        this._call("light", "turn_on", {
-          entity_id: this._config.entity,
-          rgbw_color: swatch.dataset.rgbw.split(",").map(Number),
-        })
-      )
-    );
+    this._wireLightButtons(container);
     this._wireSlider(container.querySelector("#slider"));
   }
 
