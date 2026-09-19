@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.2.0";
+const VERSION = "3.3.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -49,16 +49,16 @@ const STYLES = `
 
   /* Wide screens (tablets, desktop): light controls beside the presets. */
   @media (min-width: 700px) {
-    .dialog { width: min(880px, 100%); }
+    .dialog { width: min(920px, 100%); }
     .body { flex-direction: row; gap: 24px; overflow: hidden; padding-bottom: 24px; }
-    .light-pane { flex: 0 0 320px; overflow: auto; }
+    .light-pane { flex: 0 0 360px; overflow: auto; }
     .extras-pane { flex: 1; overflow: auto; }
     .light-pane, .extras-pane { max-height: calc(90vh - 130px); }
     .divider { width: 1px; height: auto; margin: 0; flex: 0 0 1px; }
   }
 
   .speed {
-    display: flex; align-items: center; gap: 12px; margin-top: 8px;
+    display: flex; align-items: center; gap: 12px; margin-top: 8px; padding-right: 6px;
     font-size: 13px; color: var(--secondary-text-color);
   }
   .speed input[type="range"] { flex: 1; accent-color: var(--primary-color, #03a9f4); }
@@ -101,6 +101,10 @@ const STYLES = `
     background: rgba(var(--rgb-primary-text-color, 255,255,255), .06);
     color: var(--primary-text-color); border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
   }
+  /* The dropdown list is drawn by the browser: give it real colours rather than leaving it to
+     color-scheme, which came out white on grey. */
+  select { background: var(--card-background-color); color: var(--primary-text-color); }
+  select option { background: var(--card-background-color); color: var(--primary-text-color); }
   select {
     margin-bottom: 22px; cursor: pointer;
     /* room for the chevron, which otherwise sits tight against the edge */
@@ -543,11 +547,6 @@ class GoulyCard extends HTMLElement {
 
   _wire(dialog) {
     const folder = dialog.querySelector("#folder");
-    if (folder) {
-      // The dropdown list is drawn by the browser, which follows color-scheme, so take it from
-      // the dialog's actual background rather than guessing from the theme.
-      folder.style.colorScheme = this._isDark(dialog) ? "dark" : "light";
-    }
     folder?.addEventListener("change", (event) => {
       this._search = "";
       this._call("select", "select_option", {
