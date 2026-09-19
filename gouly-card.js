@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.5.0";
+const VERSION = "3.4.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -32,7 +32,7 @@ const STYLES = `
   .dialog {
     background: var(--ha-dialog-surface-background, var(--card-background-color, #1c1c1c));
     color: var(--primary-text-color);
-    border-radius: 28px; width: min(420px, 100%); max-height: min(92vh, 1000px);
+    border-radius: 28px; width: min(420px, 100%); max-height: min(90vh, 960px);
     display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 8px 32px rgba(0,0,0,.5);
   }
@@ -49,16 +49,16 @@ const STYLES = `
 
   /* Wide screens (tablets, desktop): light controls beside the presets. */
   @media (min-width: 700px) {
-    .dialog { width: min(900px, 100%); }
+    .dialog { width: min(920px, 100%); }
     .body { flex-direction: row; gap: 24px; overflow: hidden; padding-bottom: 24px; }
-    .light-pane { flex: 0 0 340px; overflow: auto; }
+    .light-pane { flex: 0 0 360px; overflow: auto; }
     .extras-pane { flex: 1; overflow: auto; }
-    .light-pane, .extras-pane { max-height: calc(92vh - 120px); }
+    .light-pane, .extras-pane { max-height: calc(90vh - 130px); }
     .divider { width: 1px; height: auto; margin: 0; flex: 0 0 1px; }
   }
 
   .speed {
-    display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; padding-right: 6px;
+    display: flex; align-items: center; gap: 12px; margin-top: 8px; padding-right: 6px;
     font-size: 13px; color: var(--secondary-text-color);
   }
   .speed input[type="range"] { flex: 1; accent-color: var(--primary-color, #03a9f4); }
@@ -368,10 +368,10 @@ class GoulyCard extends HTMLElement {
         <div class="body">
           <div class="pane light-pane">
             <div id="light"></div>
+            <div id="speed"></div>
           </div>
           <div class="divider"></div>
           <div class="pane extras-pane">
-            <div id="speed"></div>
             <div class="tabs"></div>
             <div id="tab-content"></div>
           </div>
