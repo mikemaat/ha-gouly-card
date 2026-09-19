@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -56,7 +56,18 @@ const STYLES = `
     background: transparent; color: var(--primary-text-color);
   }
   .close:hover { background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); }
-  .body { overflow: auto; padding: 0 16px 20px; }
+  .body { overflow: auto; padding: 0 16px 20px; display: flex; flex-direction: column; }
+  .pane { min-width: 0; }
+
+  /* Wide screens (tablets, desktop): light controls beside the presets. */
+  @media (min-width: 700px) {
+    .dialog { width: min(880px, 100%); }
+    .body { flex-direction: row; gap: 24px; overflow: hidden; padding-bottom: 24px; }
+    .light-pane { flex: 0 0 320px; overflow: auto; }
+    .extras-pane { flex: 1; overflow: auto; }
+    .light-pane, .extras-pane { max-height: calc(90vh - 130px); }
+    .divider { width: 1px; height: auto; margin: 0; flex: 0 0 1px; }
+  }
 
   .speed {
     display: flex; align-items: center; gap: 12px; margin-top: 8px;
@@ -325,11 +336,15 @@ class GoulyCard extends HTMLElement {
           <h2>${esc(name)}</h2>
         </header>
         <div class="body">
-          <div id="light"></div>
-          <div id="speed"></div>
+          <div class="pane light-pane">
+            <div id="light"></div>
+            <div id="speed"></div>
+          </div>
           <div class="divider"></div>
-          <div class="tabs"></div>
-          <div id="tab-content"></div>
+          <div class="pane extras-pane">
+            <div class="tabs"></div>
+            <div id="tab-content"></div>
+          </div>
         </div>`;
       this._provideContext(dialog);
       this._backdrop.appendChild(dialog);

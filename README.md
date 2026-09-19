@@ -21,6 +21,9 @@ tapping the rest opens a dialog with:
 - **Presets**: the Gouly app's library, with a folder dropdown, a search box, and a star on each
   preset to add or remove it from favourites
 
+On a phone the dialog stacks; from about 700px wide (a tablet in portrait, or a desktop) the light
+controls sit beside the presets.
+
 It drives the entities the integration already creates, so there's nothing extra to configure.
 
 ## Install
