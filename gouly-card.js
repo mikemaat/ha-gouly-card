@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "2.2.0";
+const VERSION = "2.3.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -123,8 +123,15 @@ const STYLES = `
     background-size: 6px 6px, 6px 6px;
     background-repeat: no-repeat;
   }
-  input[type="search"] { margin-bottom: 10px; }
+  .search { position: relative; margin-bottom: 10px; }
+  .search ha-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--secondary-text-color); --mdc-icon-size: 20px; pointer-events: none;
+  }
+  .search input[type="search"] { padding-left: 40px; }
   input[type="search"]::placeholder { color: var(--secondary-text-color); }
+  /* Chrome draws its own clear button; keep it out of the way of our icon. */
+  input[type="search"]::-webkit-search-cancel-button { margin-left: 8px; }
   .hint { color: var(--secondary-text-color); font-size: 12px; margin-top: 10px; }
   .empty { color: var(--secondary-text-color); font-size: 13px; padding: 8px 0; }
 `;
@@ -491,7 +498,12 @@ class GoulyCard extends HTMLElement {
           .map((option) => `<option ${option === folders.state ? "selected" : ""}>${esc(option)}</option>`)
           .join("")}
       </select>
-      <input type="search" id="search" placeholder="Search ${options.length} presets" value="${esc(this._search)}">
+      <div class="search">
+        <ha-icon icon="mdi:magnify"></ha-icon>
+        <input type="search" id="search" placeholder="Search ${options.length} presets" value="${esc(
+        this._search
+      )}">
+      </div>
       ${
         matches.length
           ? `<div class="list">${matches
