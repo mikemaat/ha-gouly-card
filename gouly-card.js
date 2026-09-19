@@ -12,9 +12,10 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.5.0";
+const VERSION = "4.0.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
+const NATIVE_DIALOG = "ha-dialog";
 
 const STYLES = `
   #root { display: block; }
@@ -24,36 +25,23 @@ const STYLES = `
     color: var(--secondary-text-color); font-size: 14px;
   }
 
-  .backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9999;
-    display: grid; place-items: center; padding: 8px;
-    font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
-  }
-  .dialog {
-    background: var(--ha-dialog-surface-background, var(--card-background-color, #1c1c1c));
-    color: var(--primary-text-color);
-    border-radius: 28px; width: min(420px, 100%); max-height: min(98vh, 1100px);
-    display: flex; flex-direction: column; overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0,0,0,.5);
-  }
-  .dialog header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
-  .dialog header h2 { margin: 0; font-size: 20px; font-weight: 400; flex: 1; min-width: 0; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+  header h2 { margin: 0; font-size: 20px; font-weight: 400; flex: 1; min-width: 0; }
   .close {
     width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; padding: 0;
     display: grid; place-items: center; --mdc-icon-size: 22px;
     background: transparent; color: var(--primary-text-color);
   }
   .close:hover { background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); }
-  .body { overflow: auto; padding: 0 16px 20px; display: flex; flex-direction: column; }
+  .content { padding: 0 16px 20px; }
+  .body { display: flex; flex-direction: column; }
   .pane { min-width: 0; }
 
   /* Wide screens (tablets, desktop): light controls beside the presets. */
   @media (min-width: 700px) {
-    .dialog { width: min(920px, 100%); }
-    .body { flex-direction: row; gap: 24px; overflow: hidden; padding-bottom: 24px; }
-    .light-pane { flex: 0 0 360px; overflow: auto; }
-    .extras-pane { flex: 1; overflow: auto; }
-    .light-pane, .extras-pane { max-height: calc(98vh - 130px); }
+    .body { flex-direction: row; gap: 24px; align-items: start; }
+    .light-pane { flex: 0 0 340px; }
+    .extras-pane { flex: 1; min-width: 0; }
     .divider { width: 1px; height: auto; margin: 0; flex: 0 0 1px; }
   }
 
@@ -183,7 +171,7 @@ class GoulyCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     this._renderRow();
-    if (this._backdrop) this._renderDialog();
+    if (this._root) this._renderDialog();
   }
 
   // ---- entities -------------------------------------------------------------------
@@ -322,49 +310,82 @@ class GoulyCard extends HTMLElement {
   // ---- dialog ---------------------------------------------------------------------
 
   async _openDialog() {
-    this._backdrop = document.createElement("div");
-    this._backdrop.className = "backdrop";
-    const style = document.createElement("style");
-    style.textContent = STYLES;
-    this._backdrop.appendChild(style);
-    this._backdrop.addEventListener("click", (event) => {
-      if (event.target === this._backdrop) this._closeDialog();
-    });
-    this._escape = (event) => {
-      if (event.key !== "Escape") return;
-      const menu = this._backdrop?.querySelector("#folder-menu");
-      if (menu && !menu.hidden) menu.hidden = true;
-      else this._closeDialog();
-    };
-    document.addEventListener("keydown", this._escape);
-    document.body.appendChild(this._backdrop);
-    this._renderDialog();
+    // Home Assistant's own dialog: its chrome, sizing, safe areas and mobile behaviour.
     await this._loadNativeControl();
+    if (!customElements.get(NATIVE_DIALOG)) {
+      console.error("gouly-card: Home Assistant's dialog element isn't available");
+      return;
+    }
+
+    const dialog = document.createElement(NATIVE_DIALOG);
+    dialog.open = true;
+    dialog.hideActions = true;
+    dialog.heading = true; // we provide our own header element
+    dialog.style.setProperty("--dialog-content-padding", "0");
+    dialog.style.setProperty("--mdc-dialog-max-width", "900px");
+    dialog.style.setProperty("--mdc-dialog-min-width", "min(100vw, 400px)");
+    dialog.addEventListener("closed", () => this._closeDialog());
+
+    dialog.appendChild(this._buildHeader());
+
+    // Our own styles stay inside a shadow root, so they can't leak into Home Assistant.
+    const host = document.createElement("div");
+    this._root = host.attachShadow({ mode: "open" });
+    this._root.innerHTML = `<style>${STYLES}</style><div class="content"></div>`;
+    dialog.appendChild(host);
+
+    this._provideContext(host);
+    this._dialog = dialog;
+    document.body.appendChild(dialog);
     this._renderDialog();
   }
 
+  /** Home Assistant's dialog header: close on the left, its own dialog on the right. */
+  _buildHeader() {
+    const name = this._config.name || this._light.attributes.friendly_name || "Gouly";
+    const header = document.createElement(
+      customElements.get("ha-dialog-header") ? "ha-dialog-header" : "div"
+    );
+    header.slot = "heading";
+    header.innerHTML = `
+      <ha-icon-button slot="navigationIcon" id="close" label="Close">
+        <ha-icon icon="mdi:close"></ha-icon>
+      </ha-icon-button>
+      <span slot="title">${esc(name)}</span>
+      <ha-icon-button slot="actionItems" id="more" label="Open in Home Assistant">
+        <ha-icon icon="mdi:dots-vertical"></ha-icon>
+      </ha-icon-button>`;
+    header.querySelector("#close").addEventListener("click", () => this._closeDialog());
+    // History, settings, attributes and editing the favourite colours live in Home Assistant's
+    // own dialog, so hand over rather than rebuilding its header here.
+    header.querySelector("#more").addEventListener("click", () => {
+      const entityId = this._config.entity;
+      this._closeDialog();
+      document.querySelector("home-assistant")?.dispatchEvent(
+        new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true })
+      );
+    });
+    return header;
+  }
+
   _closeDialog() {
-    document.removeEventListener("keydown", this._escape);
-    this._backdrop?.remove();
-    this._backdrop = null;
+    if (this._dialog) {
+      this._dialog.open = false;
+      this._dialog.remove();
+    }
+    this._dialog = null;
+    this._root = null;
     this._native = null;
     this._tabsSignature = null;
     this._contextSubscribers.clear();
   }
 
   _renderDialog() {
-    if (!this._backdrop || !this._light) return;
-    const name = this._config.name || this._light.attributes.friendly_name || "Gouly";
-
-    let dialog = this._backdrop.querySelector(".dialog");
-    if (!dialog) {
-      dialog = document.createElement("div");
-      dialog.className = "dialog";
-      dialog.innerHTML = `
-        <header>
-          <button class="close" id="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
-          <h2>${esc(name)}</h2>
-        </header>
+    if (!this._root || !this._light) return;
+    const content = this._root.querySelector(".content");
+    if (!content.dataset.built) {
+      content.dataset.built = "1";
+      content.innerHTML = `
         <div class="body">
           <div class="pane light-pane">
             <div id="light"></div>
@@ -376,11 +397,8 @@ class GoulyCard extends HTMLElement {
             <div id="tab-content"></div>
           </div>
         </div>`;
-      this._provideContext(dialog);
-      this._backdrop.appendChild(dialog);
-      dialog.querySelector("#close").addEventListener("click", () => this._closeDialog());
     }
-
+    const dialog = content;
     this._applyTheme(dialog);
     this._updateContext();
     this._renderLight(dialog);
@@ -415,7 +433,7 @@ class GoulyCard extends HTMLElement {
         type: "config/entity_registry/get",
         entity_id: this._config.entity,
       });
-      if (this._backdrop) this._renderDialog();
+      if (this._root) this._renderDialog();
     } catch (error) {
       console.debug("gouly-card: couldn't read the entity registry entry", error);
     } finally {
@@ -620,15 +638,17 @@ class GoulyCard extends HTMLElement {
    * selected segment, which is a raised light pill either way, as Home Assistant's own is.
    */
   _applyTheme(dialog) {
-    const dark = this._isDark(dialog);
+    const dark = this._isDark();
     dialog.style.setProperty("--seg-track", dark ? "rgba(255, 255, 255, .08)" : "rgba(0, 0, 0, .06)");
     dialog.style.setProperty("--seg-active-bg", dark ? "rgba(255, 255, 255, .92)" : "#fff");
     dialog.style.setProperty("--seg-active-fg", "#1c1c1e");
   }
 
   /** Whether the dialog is dark, from its own background colour. */
-  _isDark(dialog) {
-    const background = getComputedStyle(dialog).backgroundColor;
+  _isDark() {
+    const background = getComputedStyle(document.documentElement)
+      .getPropertyValue("--card-background-color")
+      .trim();
     const [r, g, b] = (background.match(/\d+(\.\d+)?/g) || []).map(Number);
     if ([r, g, b].some((value) => value === undefined)) {
       return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
