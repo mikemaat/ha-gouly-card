@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.9.3";
+const VERSION = "0.10.0";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -323,8 +323,8 @@ class GoulyCard extends HTMLElement {
    * Whichever renders is used; `extras` says what the card must add around it.
    */
   static NATIVE = [
-    { name: "ha-state-control-light-brightness", extras: true },
     { name: "ha-more-info-info", extras: false, entityId: true },
+    { name: "ha-state-control-light-brightness", extras: true },
     { name: "more-info-light", extras: false },
     { name: "ha-control-slider", extras: true, generic: true },
   ];
@@ -380,6 +380,60 @@ class GoulyCard extends HTMLElement {
       customElements.whenDefined("ha-state-control-light-brightness"),
       new Promise((resolve) => setTimeout(resolve, 4000)),
     ]);
+  }
+
+  /**
+   * Home Assistant's controls ask for `hass` (and friends) through Lit context, which normally
+   * comes from its own dialog. Answer those requests so embedded controls work here too.
+   */
+  _provideContext(root) {
+    if (root._goulyContext) return;
+    root._goulyContext = true;
+    this._contextSubscribers = new Set();
+    this._contextSeen = new Set();
+    root.addEventListener("context-request", (event) => {
+      const key = typeof event.context === "symbol" ? event.context.description : event.context;
+      this._contextSeen.add(String(key));
+      const value = this._contextValue(key);
+      if (value === undefined) return;
+      event.stopPropagation();
+      if (typeof event.callback !== "function") return;
+      if (event.subscribe) {
+        const entry = { key, callback: event.callback };
+        this._contextSubscribers.add(entry);
+        event.callback(value, () => this._contextSubscribers.delete(entry));
+      } else {
+        event.callback(value);
+      }
+    });
+  }
+
+  _contextValue(key) {
+    const hass = this._hass;
+    if (!hass) return undefined;
+    const values = {
+      hass,
+      localize: hass.localize,
+      locale: hass.locale,
+      config: hass.config,
+      themes: hass.themes,
+      states: hass.states,
+      entities: hass.entities,
+      devices: hass.devices,
+      areas: hass.areas,
+      floors: hass.floors,
+      connection: hass.connection,
+      user: hass.user,
+    };
+    return values[key];
+  }
+
+  /** Pass new state down to anything that subscribed to context. */
+  _updateContext() {
+    this._contextSubscribers?.forEach((entry) => {
+      const value = this._contextValue(entry.key);
+      if (value !== undefined) entry.callback(value, () => this._contextSubscribers.delete(entry));
+    });
   }
 
   /** Build a native control and check it actually rendered something. */
@@ -443,9 +497,11 @@ class GoulyCard extends HTMLElement {
           <div id="tab-content"></div>
         </div>`;
       this._backdrop.appendChild(dialog);
+      this._provideContext(dialog);
       dialog.querySelector("#close").addEventListener("click", () => this._closeDialog());
     }
 
+    this._updateContext();
     this._renderLight(dialog);
     this._renderTabs(dialog);
   }
@@ -501,7 +557,9 @@ class GoulyCard extends HTMLElement {
           this._nativeCandidate = candidate;
           console.info(
             `gouly-card: using Home Assistant's ${candidate.name}`,
-            `(hass ${element.hass ? "kept" : "LOST"}, ${element.shadowRoot?.childElementCount ?? 0} child nodes)`
+            `(${element.shadowRoot?.childElementCount ?? 0} child nodes, contexts asked for:`,
+            [...(this._contextSeen || [])].join(", ") || "none",
+            ")"
           );
           if (candidate.extras) this._renderExtras(dialog);
         } else {
