@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "5.1.0";
+const VERSION = "5.2.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 // Below this width the dialog stacks, as Home Assistant does on a phone.
@@ -258,6 +258,11 @@ class GoulyCard extends HTMLElement {
     }
     if (container.querySelector(".gouly-extras")) return;
 
+    const speedHost = document.createElement("div");
+    speedHost.className = "gouly-speed";
+    this._speedRoot = speedHost.attachShadow({ mode: "open" });
+    this._speedRoot.innerHTML = `<style>${STYLES}</style><div class="content"><div id="speed"></div></div>`;
+
     const host = document.createElement("div");
     host.className = "gouly-extras";
     this._root = host.attachShadow({ mode: "open" });
@@ -265,12 +270,13 @@ class GoulyCard extends HTMLElement {
       <style>${STYLES}</style>
       <div class="content">
         <div class="divider"></div>
-        <div id="speed"></div>
         <div class="tabs"></div>
         <div id="tab-content"></div>
       </div>`;
+
+    container.appendChild(speedHost);
     container.appendChild(host);
-    this._sideBySide(dialog, container, host);
+    this._sideBySide(dialog, container, host, speedHost);
 
     // Home Assistant reuses the dialog for other entities: drop our section when it closes,
     // and when it is opened for something else.
@@ -286,20 +292,31 @@ class GoulyCard extends HTMLElement {
    * on the left, our section on the right. Home Assistant reuses this dialog for other entities,
    * so everything we change here is put back in _detach.
    */
-  _sideBySide(dialog, container, host) {
+  _sideBySide(dialog, container, host, speedHost) {
     if (window.innerWidth < SIDE_BY_SIDE_WIDTH) return;
     const info = container.querySelector("ha-more-info-info");
     const haDialog = dialog.shadowRoot.querySelector("ha-dialog");
+    if (!info) return;
+
+    // A column for Home Assistant's light controls with the effect speed under them, and our
+    // presets beside it.
+    const left = document.createElement("div");
+    left.className = "gouly-left";
+    left.style.cssText = "flex: 0 0 340px; min-width: 0;";
+    container.insertBefore(left, info);
+    left.appendChild(info);
+    left.appendChild(speedHost);
+
     this._restore = {
-      container: container.getAttribute("style"),
-      info: info?.getAttribute("style") ?? null,
-      haDialog: haDialog?.getAttribute("style") ?? null,
-      infoElement: info,
-      haDialogElement: haDialog,
       containerElement: container,
+      container: container.getAttribute("style"),
+      infoElement: info,
+      info: info.getAttribute("style"),
+      haDialogElement: haDialog,
+      haDialog: haDialog?.getAttribute("style") ?? null,
+      left,
     };
     Object.assign(container.style, { display: "flex", alignItems: "flex-start", gap: "8px" });
-    if (info) Object.assign(info.style, { flex: "0 0 340px", minWidth: "0" });
     Object.assign(host.style, { flex: "1", minWidth: "0" });
     haDialog?.style.setProperty("--mdc-dialog-min-width", "860px");
     haDialog?.style.setProperty("--mdc-dialog-max-width", "900px");
@@ -313,13 +330,20 @@ class GoulyCard extends HTMLElement {
         if (style === null) element.removeAttribute("style");
         else element.setAttribute("style", style);
       };
+      // Put Home Assistant's light controls back where they were before the column wrapper.
+      if (restore.left && restore.infoElement) {
+        restore.containerElement.insertBefore(restore.infoElement, restore.left);
+        restore.left.remove();
+      }
       put(restore.containerElement, restore.container);
       put(restore.infoElement, restore.info);
       put(restore.haDialogElement, restore.haDialog);
       this._restore = null;
     }
     this._root?.host?.remove();
+    this._speedRoot?.host?.remove();
     this._root = null;
+    this._speedRoot = null;
     this._tabsSignature = null;
   }
 
@@ -327,7 +351,7 @@ class GoulyCard extends HTMLElement {
     if (!this._root || !this._light) return;
     const dialog = this._root.querySelector(".content");
     this._applyTheme(dialog);
-    this._renderSpeed(dialog);
+    if (this._speedRoot) this._renderSpeed(this._speedRoot);
     this._renderTabs(dialog);
   }
 
