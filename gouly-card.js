@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.10.0";
+const VERSION = "0.10.1";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -411,6 +411,10 @@ class GoulyCard extends HTMLElement {
   _contextValue(key) {
     const hass = this._hass;
     if (!hass) return undefined;
+    // Home Assistant splits hass into contexts such as hassFormatters (formatEntityState and
+    // friends), hassInternationalization (localize, locale) and hassApi (callService, connection).
+    // Each is a subset of hass, so hass itself satisfies them.
+    if (typeof key === "string" && key.startsWith("hass")) return hass;
     const values = {
       hass,
       localize: hass.localize,
