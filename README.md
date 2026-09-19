@@ -23,11 +23,6 @@ icon toggles the light; tapping the rest opens a dialog with:
 - **Presets**: the Gouly app's library, with a folder dropdown, a search box, and a star on each
   preset to add or remove it from favourites
 
-The dialog is Home Assistant's own (`ha-dialog`), so it sizes, scrolls and behaves like every other
-dialog, including full screen on a phone. Its header has a close button and a menu button that
-opens Home Assistant's own more-info dialog, where history, settings and editing the favourite
-colours live.
-
 On a phone the dialog stacks; from about 700px wide (a tablet in portrait, or a desktop) the light
 controls sit beside the presets.
 
