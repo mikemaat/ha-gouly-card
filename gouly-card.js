@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.3.0";
+const VERSION = "3.4.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -96,25 +96,39 @@ const STYLES = `
   }
   .item .star.on { color: #ffc107; }
 
-  select, input[type="search"] {
+  input[type="search"] {
     width: 100%; padding: 12px; border-radius: 10px; font-size: 14px; box-sizing: border-box;
     background: rgba(var(--rgb-primary-text-color, 255,255,255), .06);
     color: var(--primary-text-color); border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
   }
-  /* The dropdown list is drawn by the browser: give it real colours rather than leaving it to
-     color-scheme, which came out white on grey. */
-  select { background: var(--card-background-color); color: var(--primary-text-color); }
-  select option { background: var(--card-background-color); color: var(--primary-text-color); }
-  select {
-    margin-bottom: 22px; cursor: pointer;
-    /* room for the chevron, which otherwise sits tight against the edge */
-    padding-right: 36px; appearance: none;
-    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
-                      linear-gradient(135deg, currentColor 50%, transparent 50%);
-    background-position: calc(100% - 20px) calc(50% + 2px), calc(100% - 14px) calc(50% + 2px);
-    background-size: 6px 6px, 6px 6px;
-    background-repeat: no-repeat;
+
+  /* Our own dropdown: a native select's list is drawn by the browser and can't be given a
+     radius or dark background. */
+  .picker { position: relative; margin-bottom: 22px; }
+  .picker-button {
+    width: 100%; display: flex; align-items: center; gap: 8px; cursor: pointer;
+    padding: 12px 14px; border-radius: 10px; font-size: 14px; text-align: left;
+    background: rgba(var(--rgb-primary-text-color, 255,255,255), .06);
+    color: var(--primary-text-color);
+    border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
   }
+  .picker-button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picker-button ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); }
+  .picker-menu {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 2;
+    max-height: 320px; overflow: auto; padding: 8px; border-radius: 14px;
+    background: var(--card-background-color, #1c1c1c);
+    border: 1px solid rgba(var(--rgb-primary-text-color, 255,255,255), .1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  }
+  .picker-menu[hidden] { display: none; }
+  .picker-item {
+    display: block; width: 100%; text-align: left; cursor: pointer; border: none;
+    padding: 10px 12px; border-radius: 8px; font-size: 14px;
+    background: transparent; color: var(--primary-text-color);
+  }
+  .picker-item:hover { background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); }
+  .picker-item.selected { color: var(--primary-color, #03a9f4); font-weight: 500; }
   .search { position: relative; margin-bottom: 10px; }
   .search ha-icon {
     position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
@@ -316,7 +330,12 @@ class GoulyCard extends HTMLElement {
     this._backdrop.addEventListener("click", (event) => {
       if (event.target === this._backdrop) this._closeDialog();
     });
-    this._escape = (event) => event.key === "Escape" && this._closeDialog();
+    this._escape = (event) => {
+      if (event.key !== "Escape") return;
+      const menu = this._backdrop?.querySelector("#folder-menu");
+      if (menu && !menu.hidden) menu.hidden = true;
+      else this._closeDialog();
+    };
     document.addEventListener("keydown", this._escape);
     document.body.appendChild(this._backdrop);
     this._renderDialog();
@@ -510,11 +529,22 @@ class GoulyCard extends HTMLElement {
     const matches = options.filter((option) => option.toLowerCase().includes(this._search.toLowerCase()));
     const favourites = new Set(favouritesOf(light));
     return `
-      <select id="folder">
-        ${(folders.attributes.options || [])
-          .map((option) => `<option ${option === folders.state ? "selected" : ""}>${esc(option)}</option>`)
-          .join("")}
-      </select>
+      <div class="picker">
+        <button class="picker-button" id="folder-button">
+          <span>${esc(folders.state)}</span>
+          <ha-icon icon="mdi:chevron-down"></ha-icon>
+        </button>
+        <div class="picker-menu" id="folder-menu" hidden>
+          ${(folders.attributes.options || [])
+            .map(
+              (option) =>
+                `<button class="picker-item ${option === folders.state ? "selected" : ""}" data-folder="${esc(
+                  option
+                )}">${esc(option)}</button>`
+            )
+            .join("")}
+        </div>
+      </div>
       <div class="search">
         <ha-icon icon="mdi:magnify"></ha-icon>
         <input type="search" id="search" placeholder="Search ${options.length} presets" value="${esc(
@@ -546,14 +576,29 @@ class GoulyCard extends HTMLElement {
   }
 
   _wire(dialog) {
-    const folder = dialog.querySelector("#folder");
-    folder?.addEventListener("change", (event) => {
-      this._search = "";
-      this._call("select", "select_option", {
-        entity_id: this._folderSelect.entity_id,
-        option: event.target.value,
+    const button = dialog.querySelector("#folder-button");
+    const menu = dialog.querySelector("#folder-menu");
+    if (button && menu) {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        menu.hidden = !menu.hidden;
+        if (!menu.hidden) menu.querySelector(".selected")?.scrollIntoView({ block: "center" });
       });
-    });
+      menu.querySelectorAll("[data-folder]").forEach((item) =>
+        item.addEventListener("click", () => {
+          menu.hidden = true;
+          this._search = "";
+          this._call("select", "select_option", {
+            entity_id: this._folderSelect.entity_id,
+            option: item.dataset.folder,
+          });
+        })
+      );
+      // Anywhere else in the dialog closes it.
+      dialog.addEventListener("click", () => {
+        menu.hidden = true;
+      });
+    }
     dialog.querySelector("#search")?.addEventListener("input", (event) => {
       this._search = event.target.value;
       const content = dialog.querySelector("#tab-content");
