@@ -12,9 +12,9 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "3.5.0";
+const VERSION = "5.0.0";
 const DEFAULT_ICON = "mdi:snowflake";
-const NATIVE_CONTROL = "ha-more-info-info";
+const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
 const STYLES = `
   #root { display: block; }
@@ -24,39 +24,9 @@ const STYLES = `
     color: var(--secondary-text-color); font-size: 14px;
   }
 
-  .backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9999;
-    display: grid; place-items: center; padding: 8px;
-    font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
-  }
-  .dialog {
-    background: var(--ha-dialog-surface-background, var(--card-background-color, #1c1c1c));
-    color: var(--primary-text-color);
-    border-radius: 28px; width: min(420px, 100%); max-height: min(98vh, 1100px);
-    display: flex; flex-direction: column; overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0,0,0,.5);
-  }
-  .dialog header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
-  .dialog header h2 { margin: 0; font-size: 20px; font-weight: 400; flex: 1; min-width: 0; }
-  .close {
-    width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; padding: 0;
-    display: grid; place-items: center; --mdc-icon-size: 22px;
-    background: transparent; color: var(--primary-text-color);
-  }
-  .close:hover { background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); }
-  .body { overflow: auto; padding: 0 16px 20px; display: flex; flex-direction: column; }
-  .pane { min-width: 0; }
-
-  /* Wide screens (tablets, desktop): light controls beside the presets. */
-  @media (min-width: 700px) {
-    .dialog { width: min(920px, 100%); }
-    .body { flex-direction: row; gap: 24px; overflow: hidden; padding-bottom: 24px; }
-    .light-pane { flex: 0 0 360px; overflow: auto; }
-    .extras-pane { flex: 1; overflow: auto; }
-    .light-pane, .extras-pane { max-height: calc(98vh - 130px); }
-    .divider { width: 1px; height: auto; margin: 0; flex: 0 0 1px; }
-  }
-
+  :host, .content { display: block; }
+  .content { padding: 0 24px 24px; }
+  .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 8px 0 16px; }
   .speed {
     display: flex; align-items: center; gap: 12px; margin-top: 8px; padding-right: 6px;
     font-size: 13px; color: var(--secondary-text-color);
@@ -183,7 +153,7 @@ class GoulyCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     this._renderRow();
-    if (this._backdrop) this._renderDialog();
+    if (this._root) this._renderDialog();
   }
 
   // ---- entities -------------------------------------------------------------------
@@ -262,165 +232,64 @@ class GoulyCard extends HTMLElement {
     this._tile.hass = this._hass;
   }
 
-  // ---- Home Assistant's light control ---------------------------------------------
+  // ---- Home Assistant's more-info dialog, with our section added ------------------
 
-  /**
-   * Home Assistant's controls take hass through Lit context (as hassFormatters,
-   * hassInternationalization and hassApi), which normally comes from its own dialog. Each is a
-   * subset of hass, so answer those requests with hass itself.
-   */
-  _provideContext(root) {
-    root.addEventListener("context-request", (event) => {
-      const key = typeof event.context === "symbol" ? event.context.description : event.context;
-      if (typeof key !== "string" || !key.startsWith("hass") || !this._hass) return;
-      event.stopPropagation();
-      if (typeof event.callback !== "function") return;
-      if (event.subscribe) {
-        const entry = { callback: event.callback };
-        this._contextSubscribers.add(entry);
-        event.callback(this._hass, () => this._contextSubscribers.delete(entry));
-      } else {
-        event.callback(this._hass);
-      }
-    });
-  }
-
-  _updateContext() {
-    this._contextSubscribers.forEach((entry) =>
-      entry.callback(this._hass, () => this._contextSubscribers.delete(entry))
+  /** Open Home Assistant's own dialog for this light, then add our part to it. */
+  _openDialog() {
+    const entityId = this._config.entity;
+    document.querySelector("home-assistant")?.dispatchEvent(
+      new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true })
     );
+    this._attach();
   }
 
-  /**
-   * Home Assistant only loads its more-info code once such a dialog has been opened, so open one
-   * for this light and close it again straight away.
-   */
-  async _loadNativeControl() {
-    if (customElements.get(NATIVE_CONTROL)) return;
-    try {
-      const helpers = await window.loadCardHelpers?.();
-      helpers?.importMoreInfoControl?.("light");
-      const root = document.querySelector("home-assistant");
-      if (root && !customElements.get(NATIVE_CONTROL)) {
-        const fire = (entityId) =>
-          root.dispatchEvent(
-            new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true })
-          );
-        fire(this._config.entity);
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        fire(null);
-      }
-      await Promise.race([
-        customElements.whenDefined(NATIVE_CONTROL),
-        new Promise((resolve) => setTimeout(resolve, 4000)),
-      ]);
-    } catch (error) {
-      console.warn("gouly-card: couldn't load Home Assistant's light controls", error);
+  /** The dialog is created asynchronously, so look for it for a moment. */
+  async _attach(attempt = 0) {
+    const dialog = document
+      .querySelector("home-assistant")
+      ?.shadowRoot?.querySelector(MORE_INFO_DIALOG);
+    const container = dialog?.shadowRoot?.querySelector(".content");
+    if (!container) {
+      if (attempt < 40) setTimeout(() => this._attach(attempt + 1), 50);
+      else console.warn("gouly-card: couldn't find Home Assistant's dialog to add presets to");
+      return;
     }
-  }
+    if (container.querySelector(".gouly-extras")) return;
 
-  // ---- dialog ---------------------------------------------------------------------
+    const host = document.createElement("div");
+    host.className = "gouly-extras";
+    this._root = host.attachShadow({ mode: "open" });
+    this._root.innerHTML = `
+      <style>${STYLES}</style>
+      <div class="content">
+        <div class="divider"></div>
+        <div id="speed"></div>
+        <div class="tabs"></div>
+        <div id="tab-content"></div>
+      </div>`;
+    container.appendChild(host);
 
-  async _openDialog() {
-    this._backdrop = document.createElement("div");
-    this._backdrop.className = "backdrop";
-    const style = document.createElement("style");
-    style.textContent = STYLES;
-    this._backdrop.appendChild(style);
-    this._backdrop.addEventListener("click", (event) => {
-      if (event.target === this._backdrop) this._closeDialog();
+    // Home Assistant reuses the dialog for other entities: drop our section when it closes,
+    // and when it is opened for something else.
+    dialog.addEventListener("dialog-closed", () => this._detach(), { once: true });
+    dialog.shadowRoot.querySelector("ha-dialog")?.addEventListener("closed", () => this._detach(), {
+      once: true,
     });
-    this._escape = (event) => {
-      if (event.key !== "Escape") return;
-      const menu = this._backdrop?.querySelector("#folder-menu");
-      if (menu && !menu.hidden) menu.hidden = true;
-      else this._closeDialog();
-    };
-    document.addEventListener("keydown", this._escape);
-    document.body.appendChild(this._backdrop);
-    this._renderDialog();
-    await this._loadNativeControl();
     this._renderDialog();
   }
 
-  _closeDialog() {
-    document.removeEventListener("keydown", this._escape);
-    this._backdrop?.remove();
-    this._backdrop = null;
-    this._native = null;
+  _detach() {
+    this._root?.host?.remove();
+    this._root = null;
     this._tabsSignature = null;
-    this._contextSubscribers.clear();
   }
 
   _renderDialog() {
-    if (!this._backdrop || !this._light) return;
-    const name = this._config.name || this._light.attributes.friendly_name || "Gouly";
-
-    let dialog = this._backdrop.querySelector(".dialog");
-    if (!dialog) {
-      dialog = document.createElement("div");
-      dialog.className = "dialog";
-      dialog.innerHTML = `
-        <header>
-          <button class="close" id="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
-          <h2>${esc(name)}</h2>
-        </header>
-        <div class="body">
-          <div class="pane light-pane">
-            <div id="light"></div>
-            <div id="speed"></div>
-          </div>
-          <div class="divider"></div>
-          <div class="pane extras-pane">
-            <div class="tabs"></div>
-            <div id="tab-content"></div>
-          </div>
-        </div>`;
-      this._provideContext(dialog);
-      this._backdrop.appendChild(dialog);
-      dialog.querySelector("#close").addEventListener("click", () => this._closeDialog());
-    }
-
+    if (!this._root || !this._light) return;
+    const dialog = this._root.querySelector(".content");
     this._applyTheme(dialog);
-    this._updateContext();
-    this._renderLight(dialog);
     this._renderSpeed(dialog);
     this._renderTabs(dialog);
-  }
-
-  _renderLight(dialog) {
-    const container = dialog.querySelector("#light");
-    if (!customElements.get(NATIVE_CONTROL)) return;
-    if (!this._native || !this._native.isConnected) {
-      container.innerHTML = "";
-      this._native = document.createElement(NATIVE_CONTROL);
-      container.appendChild(this._native);
-    }
-    this._native.hass = this._hass;
-    this._native.stateObj = this._light;
-    this._native.entityId = this._config.entity;
-    if (this._entry) this._native.entry = this._entry;
-    else this._loadEntry();
-  }
-
-  /**
-   * The entity's registry entry: this is where Home Assistant's light control looks for the
-   * favourite colours. Its own dialog passes it in, and without it that row is left out.
-   */
-  async _loadEntry() {
-    if (this._entry || this._entryPending) return;
-    this._entryPending = true;
-    try {
-      this._entry = await this._hass.callWS({
-        type: "config/entity_registry/get",
-        entity_id: this._config.entity,
-      });
-      if (this._backdrop) this._renderDialog();
-    } catch (error) {
-      console.debug("gouly-card: couldn't read the entity registry entry", error);
-    } finally {
-      this._entryPending = false;
-    }
   }
 
   _renderSpeed(dialog) {
@@ -442,8 +311,6 @@ class GoulyCard extends HTMLElement {
       this._call("number", "set_value", { entity_id: speed.entity_id, value: Number(event.target.value) })
     );
   }
-
-  // ---- favourites and presets -----------------------------------------------------
 
   _renderTabs(dialog) {
     const tabs = dialog.querySelector(".tabs");
