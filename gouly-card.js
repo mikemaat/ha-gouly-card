@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "1.1.0";
+const VERSION = "2.0.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
@@ -109,15 +109,8 @@ const STYLES = `
   .empty { color: var(--secondary-text-color); font-size: 13px; padding: 8px 0; }
 `;
 
-const isPreset = (effect) => typeof effect === "string" && effect.includes(" / ");
-
-/**
- * Favourites come from the integration's `favourite_presets` attribute, so they show here even
- * when the light's effect list is set to leave presets out. Older versions only had them in the
- * effect list.
- */
-const favouritesOf = (light) =>
-  light.attributes.favourite_presets ?? (light.attributes.effect_list || []).filter(isPreset);
+/** Favourites, as published by the integration. */
+const favouritesOf = (light) => light.attributes.favourite_presets || [];
 
 /** Escape text before putting it in markup: preset names come from the device. */
 const esc = (value) =>
@@ -428,7 +421,6 @@ class GoulyCard extends HTMLElement {
     return JSON.stringify([
       this._tab,
       this._search,
-      light.attributes.effect,
       favouritesOf(light),
       folders?.state,
       folders?.attributes.options?.length,
@@ -449,9 +441,7 @@ class GoulyCard extends HTMLElement {
         .map(
           (effect) => `
           <div class="item">
-            <button class="label ${effect === light.attributes.effect ? "active" : ""}" data-effect="${esc(
-            effect
-          )}">${esc(effect)}</button>
+            <button class="label" data-favourite="${esc(effect)}">${esc(effect)}</button>
             <button class="star on" data-unstar="${esc(effect)}" title="Remove from favourites">
               <ha-icon icon="mdi:star"></ha-icon>
             </button>
@@ -543,9 +533,9 @@ class GoulyCard extends HTMLElement {
   }
 
   _wireItems(dialog) {
-    dialog.querySelectorAll("[data-effect]").forEach((item) =>
+    dialog.querySelectorAll("[data-favourite]").forEach((item) =>
       item.addEventListener("click", () =>
-        this._call("light", "turn_on", { entity_id: this._config.entity, effect: item.dataset.effect })
+        this._call("gouly", "apply_preset", { entity_id: this._config.entity, preset: item.dataset.favourite })
       )
     );
     dialog.querySelectorAll("[data-preset]").forEach((item) =>

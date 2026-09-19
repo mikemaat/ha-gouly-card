@@ -17,10 +17,7 @@ tapping the rest opens a dialog with:
 - **Home Assistant's own light controls** - the same brightness slider, buttons, colour picker and
   effect list as the standard more-info dialog
 - **Effect speed** slider
-- **Favourites**: your favourite presets as one-tap buttons, sorted alphabetically. They show here
-  even if you set the integration to keep presets out of the light's effect list
-  (**Configure > Favourite presets > Presets in the effect list > No presets**), which keeps
-  Home Assistant's own effect list to the 140 effects
+- **Favourites**: your favourite presets as one-tap buttons, sorted alphabetically
 - **Presets**: the Gouly app's library, with a folder dropdown, a search box, and a star on each
   preset to add or remove it from favourites
 
