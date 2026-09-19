@@ -11,7 +11,7 @@
  * Only `entity` is required; the others are found from the same device.
  */
 
-const VERSION = "0.8.1";
+const VERSION = "0.9.0";
 const DEFAULT_ICON = "mdi:snowflake";
 
 const SWATCHES = [
@@ -320,6 +320,7 @@ class GoulyCard extends HTMLElement {
    * Whichever renders is used; `extras` says what the card must add around it.
    */
   static NATIVE = [
+    { name: "ha-more-info-info", extras: false, entityId: true },
     { name: "more-info-light", extras: false },
     { name: "ha-state-control-light-brightness", extras: true },
     { name: "ha-control-slider", extras: true, generic: true },
@@ -349,15 +350,34 @@ class GoulyCard extends HTMLElement {
       }
       await Promise.race([
         Promise.all([
-          customElements.whenDefined("more-info-light"),
+          customElements.whenDefined("ha-more-info-info"),
           customElements.whenDefined("ha-control-slider"),
         ]),
         new Promise((resolve) => setTimeout(resolve, 3000)),
       ]);
+      if (!customElements.get("ha-more-info-info")) await this._preloadMoreInfo();
     } catch (error) {
       return false;
     }
     return GoulyCard.NATIVE.some((candidate) => customElements.get(candidate.name));
+  }
+
+  /**
+   * Home Assistant only loads its more-info dialog when one is first opened. Open one for this
+   * light and close it again straight away, so its elements exist for us to embed.
+   */
+  async _preloadMoreInfo() {
+    const root = document.querySelector("home-assistant");
+    if (!root) return;
+    const fire = (entityId) =>
+      root.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
+    fire(this._config.entity);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fire(null);
+    await Promise.race([
+      customElements.whenDefined("ha-more-info-info"),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
   }
 
   /** Build a native control and check it actually rendered something. */
@@ -382,6 +402,7 @@ class GoulyCard extends HTMLElement {
     } else {
       element.hass = this._hass;
       element.stateObj = this._light;
+      if (candidate.entityId) element.entityId = this._config.entity;
     }
     container.appendChild(element);
     return element;
@@ -447,6 +468,7 @@ class GoulyCard extends HTMLElement {
       } else {
         this._native.hass = this._hass;
         this._native.stateObj = light;
+        if (this._nativeCandidate.entityId) this._native.entityId = this._config.entity;
       }
       if (this._nativeCandidate.extras) this._renderExtras(dialog);
       return;
@@ -485,7 +507,13 @@ class GoulyCard extends HTMLElement {
 
   /** What Home Assistant elements exist in this session; handy when something looks wrong. */
   _logAvailability() {
-    const names = ["more-info-light", "ha-state-control-light-brightness", "ha-control-slider", "ha-hs-color-picker"];
+    const names = [
+      "ha-more-info-info",
+      "more-info-light",
+      "ha-state-control-light-brightness",
+      "ha-control-slider",
+      "ha-hs-color-picker",
+    ];
     console.info(
       "gouly-card: available Home Assistant controls -",
       names.map((name) => `${name}: ${customElements.get(name) ? "yes" : "no"}`).join(", ")
