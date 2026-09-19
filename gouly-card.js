@@ -12,29 +12,17 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "2.3.0";
+const VERSION = "3.0.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const NATIVE_CONTROL = "ha-more-info-info";
 
 const STYLES = `
-  .row {
-    display: flex; align-items: center; gap: 12px;
+  #root { display: block; }
+  .error {
+    padding: 16px; border-radius: var(--ha-card-border-radius, 12px);
     background: var(--ha-card-background, var(--card-background-color, #1c1c1c));
-    border-radius: var(--ha-card-border-radius, 12px);
-    border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, transparent);
-    box-shadow: var(--ha-card-box-shadow, none);
-    padding: 12px; cursor: pointer;
+    color: var(--secondary-text-color); font-size: 14px;
   }
-  .icon {
-    width: 40px; height: 40px; border-radius: 50%; flex: 0 0 40px; padding: 0; border: none;
-    display: grid; place-items: center; cursor: pointer; --mdc-icon-size: 22px;
-    background: rgba(var(--rgb-primary-text-color, 255,255,255), .05);
-    color: var(--state-icon-color, #9e9e9e);
-  }
-  .icon:hover { filter: brightness(1.2); }
-  .titles { flex: 1; min-width: 0; }
-  .name { font-size: 15px; color: var(--primary-text-color); }
-  .state { font-size: 13px; color: var(--secondary-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9999;
@@ -148,18 +136,6 @@ const esc = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-/** The light's current colour as "r,g,b", or null when it has none. */
-const lightColour = (light) => {
-  const rgbw = light.attributes.rgbw_color;
-  if (rgbw) {
-    const [r, g, b, w] = rgbw;
-    if (r || g || b) return `${r},${g},${b}`;
-    if (w) return "255,214,170"; // warm white
-  }
-  const rgb = light.attributes.rgb_color;
-  return rgb ? rgb.join(",") : null;
-};
-
 class GoulyCard extends HTMLElement {
   constructor() {
     super();
@@ -220,37 +196,57 @@ class GoulyCard extends HTMLElement {
 
   // ---- the dashboard row ----------------------------------------------------------
 
+  /**
+   * The row is Home Assistant's own tile card, so it matches every other tile on the
+   * dashboard. Its own actions are turned off: tapping the icon toggles the light, tapping
+   * anywhere else opens this card's dialog.
+   */
+  async _ensureTile() {
+    if (this._tile || this._tilePending) return;
+    this._tilePending = true;
+    try {
+      const helpers = await window.loadCardHelpers();
+      const tile = helpers.createCardElement({
+        type: "tile",
+        entity: this._config.entity,
+        icon: this._config.icon || DEFAULT_ICON,
+        name: this._config.name,
+        tap_action: { action: "none" },
+        icon_tap_action: { action: "none" },
+        hold_action: { action: "none" },
+        double_tap_action: { action: "none" },
+      });
+      tile.hass = this._hass;
+      tile.addEventListener("click", (event) => {
+        const onIcon = event
+          .composedPath()
+          .some((node) => typeof node.localName === "string" && node.localName.includes("tile-icon"));
+        if (onIcon) {
+          this._call("light", "toggle", { entity_id: this._config.entity });
+        } else {
+          this._openDialog();
+        }
+      });
+      this._tile = tile;
+      const root = this.shadowRoot.getElementById("root");
+      root.innerHTML = "";
+      root.appendChild(tile);
+    } catch (error) {
+      console.error("gouly-card: couldn't create the tile card", error);
+      this.shadowRoot.getElementById("root").innerHTML =
+        `<div class="error">Couldn't load Home Assistant's tile card.</div>`;
+    } finally {
+      this._tilePending = false;
+    }
+  }
+
   _renderRow() {
     if (!this._config || !this._hass) return;
-    const root = this.shadowRoot.getElementById("root");
-    if (!root) return;
-    const light = this._light;
-    if (!light) {
-      root.innerHTML = `<div class="row"><div class="titles"><div class="name">${esc(
-        this._config.entity
-      )}</div><div class="state">Entity not found</div></div></div>`;
+    if (!this._tile) {
+      this._ensureTile();
       return;
     }
-    const on = light.state === "on";
-    const name = this._config.name || light.attributes.friendly_name || "Gouly";
-    const percent = Math.round(((light.attributes.brightness || 0) / 255) * 100);
-    const detail = on
-      ? [light.attributes.effect, percent ? `${percent}%` : null].filter(Boolean).join(" · ") || "On"
-      : "Off";
-    const colour = on ? lightColour(light) : null;
-
-    root.innerHTML = `
-      <div class="row" id="row">
-        <button class="icon" id="icon" aria-label="Toggle" style="${
-          colour ? `background: rgba(${colour}, .25); color: rgb(${colour});` : ""
-        }"><ha-icon icon="${esc(this._config.icon || DEFAULT_ICON)}"></ha-icon></button>
-        <div class="titles"><div class="name">${esc(name)}</div><div class="state">${esc(detail)}</div></div>
-      </div>`;
-    root.querySelector("#row").addEventListener("click", () => this._openDialog());
-    root.querySelector("#icon").addEventListener("click", (event) => {
-      event.stopPropagation();
-      this._call("light", "toggle", { entity_id: this._config.entity });
-    });
+    this._tile.hass = this._hass;
   }
 
   // ---- Home Assistant's light control ---------------------------------------------

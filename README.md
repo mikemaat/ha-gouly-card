@@ -11,8 +11,8 @@ dashboard, with colour, brightness, effects, presets and favourites behind a sin
 
 ## What it does
 
-The row shows the light's name and what it's currently doing. Tapping the icon toggles the light,
-tapping the rest opens a dialog with:
+The row is Home Assistant's own tile card, so it matches the rest of your dashboard. Tapping the
+icon toggles the light; tapping the rest opens a dialog with:
 
 - **Home Assistant's own light controls** - the same brightness slider, buttons, colour picker and
   effect list as the standard more-info dialog
