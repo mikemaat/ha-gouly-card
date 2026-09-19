@@ -5,6 +5,10 @@ dashboard, with colour, brightness, effects, presets and favourites behind a sin
 
 > Not affiliated with or endorsed by Gouly.
 
+![The card's layout: a row on the dashboard, and the dialog it opens](layout.png)
+
+*Illustration of the layout.*
+
 ## What it does
 
 The row shows the light's name and what it's currently doing. Tapping the icon toggles the light,
