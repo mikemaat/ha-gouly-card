@@ -12,7 +12,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "5.4.0";
+const VERSION = "5.5.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 // Below this width the dialog stacks, as Home Assistant does on a phone.
@@ -296,11 +296,32 @@ class GoulyCard extends HTMLElement {
    * on the left, our section on the right. Home Assistant reuses this dialog for other entities,
    * so everything we change here is put back in _detach.
    */
+  /**
+   * Everything above the content that might carry the dialog's width, innermost first. Home
+   * Assistant has used ha-dialog and ha-md-dialog at varying depths, so widen whichever are
+   * there rather than naming one and silently doing nothing.
+   */
+  _findDialogElements(container) {
+    const chain = [];
+    const found = [];
+    let node = container;
+    while (node) {
+      if (node.localName) {
+        chain.push(node.localName);
+        if (/dialog$/.test(node.localName)) found.push(node);
+        // The surface inside a dialog is usually what is actually sized.
+        const surface = node.shadowRoot?.querySelector(".mdc-dialog__surface, dialog, .container");
+        if (surface) found.push(surface);
+      }
+      node = node.parentElement || node.parentNode?.host || node.getRootNode?.()?.host;
+    }
+    console.info("gouly-card: dialog chain:", chain.join(" < "));
+    return found;
+  }
+
   _sideBySide(dialog, container, host, speedHost) {
     if (window.innerWidth < SIDE_BY_SIDE_WIDTH) return;
     const info = container.querySelector("ha-more-info-info");
-    // Home Assistant has used ha-dialog and, more recently, ha-md-dialog here.
-    const haDialog = dialog.shadowRoot.querySelector("ha-md-dialog, ha-dialog");
     if (!info) return;
 
     // A column for Home Assistant's light controls with the effect speed under them, and our
@@ -317,38 +338,30 @@ class GoulyCard extends HTMLElement {
       container: container.getAttribute("style"),
       infoElement: info,
       info: info.getAttribute("style"),
-      haDialogElement: haDialog,
-      haDialog: haDialog?.getAttribute("style") ?? null,
       left,
     };
     Object.assign(container.style, { display: "flex", alignItems: "flex-start", gap: "16px" });
     Object.assign(host.style, { flex: "1", minWidth: "0" });
     host.shadowRoot?.querySelector(".content")?.classList.add("wide");
 
-    // Home Assistant pins this dialog at 580px. Widen the dialog element itself, its custom
-    // properties, and the surface inside it, since which of these carries the width depends on
-    // the Home Assistant version.
+    // Home Assistant pins this dialog at 580px, so widen everything above the content that
+    // might carry the width, and record each one to put back on close.
     const width = Math.min(SIDE_BY_SIDE_DIALOG_WIDTH, window.innerWidth - 32);
-    if (haDialog) {
-      Object.assign(haDialog.style, { width: `${width}px`, maxWidth: `${width}px` });
-      haDialog.style.setProperty("--mdc-dialog-min-width", `${width}px`);
-      haDialog.style.setProperty("--mdc-dialog-max-width", `${width}px`);
-      haDialog.style.setProperty("--dialog-surface-width", `${width}px`);
-      const surface = haDialog.shadowRoot?.querySelector(".mdc-dialog__surface, dialog, .container");
-      if (surface) {
-        this._restore.surfaceElement = surface;
-        this._restore.surface = surface.getAttribute("style");
-        Object.assign(surface.style, { width: `${width}px`, maxWidth: `${width}px` });
-      }
-      requestAnimationFrame(() =>
-        console.info(
-          `gouly-card: widened ${haDialog.localName} to ${width}px`,
-          `(now ${Math.round(haDialog.getBoundingClientRect().width)}px)`
-        )
-      );
-    } else {
-      console.warn("gouly-card: couldn't find the dialog element to widen");
-    }
+    const widened = this._findDialogElements(container);
+    this._restore.widened = widened.map((element) => [element, element.getAttribute("style")]);
+    widened.forEach((element) => {
+      Object.assign(element.style, { width: `${width}px`, maxWidth: `${width}px` });
+      element.style.setProperty("--mdc-dialog-min-width", `${width}px`);
+      element.style.setProperty("--mdc-dialog-max-width", `${width}px`);
+      element.style.setProperty("--dialog-surface-width", `${width}px`);
+    });
+    requestAnimationFrame(() =>
+      console.info(
+        `gouly-card: asked for ${width}px;`,
+        `content is now ${Math.round(container.getBoundingClientRect().width)}px wide`,
+        widened.length ? `(set on ${widened.map((e) => e.localName || e.className).join(", ")})` : "(nothing to set)"
+      )
+    );
   }
 
   _detach() {
@@ -366,8 +379,7 @@ class GoulyCard extends HTMLElement {
       }
       put(restore.containerElement, restore.container);
       put(restore.infoElement, restore.info);
-      put(restore.haDialogElement, restore.haDialog);
-      put(restore.surfaceElement, restore.surface);
+      restore.widened?.forEach(([element, style]) => put(element, style));
       this._restore = null;
     }
     this._root?.host?.remove();
