@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.0.1";
+const VERSION = "6.0.2";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -497,7 +497,9 @@ class GoulyCard extends HTMLElement {
     return `
       <div class="picker">
         <button class="picker-button" id="folder-button">
-          <span>${esc(folders.state)}</span>
+          <span>${esc(
+            ["unknown", "unavailable"].includes(folders.state) ? "Choose a folder" : folders.state
+          )}</span>
           <ha-icon icon="mdi:chevron-down"></ha-icon>
         </button>
         <div class="picker-menu" id="folder-menu" hidden>
