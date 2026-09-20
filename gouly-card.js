@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.0.2";
+const VERSION = "6.0.3";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -33,7 +33,8 @@ const STYLES = `
   .content.wide { padding: 0; }
 
   .speed {
-    display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; padding-right: 6px;
+    /* Home Assistant's Effect button sits right above this; it needs room. */
+    display: flex; align-items: center; gap: 12px; margin: 20px 0 16px; padding-right: 6px;
     font-size: 13px; color: var(--secondary-text-color);
   }
   .speed input[type="range"] { flex: 1; accent-color: var(--primary-color, #03a9f4); }
