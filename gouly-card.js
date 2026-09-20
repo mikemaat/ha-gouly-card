@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.1.1";
+const VERSION = "6.2.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -71,6 +71,11 @@ const STYLES = `
     background: rgba(var(--rgb-primary-text-color, 255,255,255), .06); color: var(--secondary-text-color);
   }
   .item .star.on { color: #ffc107; }
+
+  .eyebrow {
+    font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--secondary-text-color); margin: 0 0 6px 4px;
+  }
 
   /* Our own folder menu: a native select's list is drawn by the browser and can't be styled. */
   .picker { position: relative; margin-bottom: 22px; }
@@ -512,6 +517,7 @@ class GoulyCard extends HTMLElement {
     const matches = options.filter((option) => option.toLowerCase().includes(this._search.toLowerCase()));
     const favourites = new Set(favouritesOf(this._light));
     return `
+      <div class="eyebrow">Preset folder</div>
       <div class="picker">
         <button class="picker-button" id="folder-button">
           <span>${esc(
