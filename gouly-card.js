@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.0.0";
+const VERSION = "6.0.1";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -410,9 +410,17 @@ class GoulyCard extends HTMLElement {
 
     // Only rebuild the list when what it shows has changed, so an open menu or a half typed
     // search isn't thrown away by an unrelated state update.
-    const signature = this._signature();
-    if (signature === this._signatureCache) return;
-    this._signatureCache = signature;
+    const { list, favourites } = this._signature();
+    const previous = this._signatureCache;
+    if (previous && previous.list === list && previous.favourites === favourites) return;
+    this._signatureCache = { list, favourites };
+
+    // Starring a preset only changes its star. Swapping those in place keeps a long list from
+    // being rebuilt - and scrolled back to the top - every time one is tapped.
+    if (previous && previous.list === list && this._tab === "presets") {
+      this._refreshStars();
+      return;
+    }
 
     const content = this._root.querySelector("#tab-content");
     const active = content.querySelector("input[type=search]");
@@ -427,18 +435,34 @@ class GoulyCard extends HTMLElement {
     }
   }
 
+  /** What the list is showing, with the favourites kept apart so stars can be updated alone. */
   _signature() {
     const folders = this._folderSelect;
     const presets = this._presetSelect;
-    return JSON.stringify([
-      this._tab,
-      this._search,
-      favouritesOf(this._light),
-      folders?.state,
-      folders?.attributes.options?.length,
-      presets?.state,
-      presets?.attributes.options,
-    ]);
+    return {
+      list: JSON.stringify([
+        this._tab,
+        this._search,
+        // On the Favourites tab the favourites are the list, so they belong in the signature.
+        this._tab === "favourites" ? favouritesOf(this._light) : null,
+        folders?.state,
+        folders?.attributes.options?.length,
+        presets?.state,
+        presets?.attributes.options,
+      ]),
+      favourites: JSON.stringify(favouritesOf(this._light)),
+    };
+  }
+
+  /** Bring the stars in the rendered list up to date without touching anything else. */
+  _refreshStars() {
+    const favourites = new Set(favouritesOf(this._light));
+    this._root.querySelectorAll("[data-star]").forEach((star) => {
+      const starred = favourites.has(star.dataset.star);
+      star.classList.toggle("on", starred);
+      star.title = starred ? "Remove from favourites" : "Add to favourites";
+      star.querySelector("ha-icon")?.setAttribute("icon", starred ? "mdi:star" : "mdi:star-outline");
+    });
   }
 
   _tabMarkup() {
@@ -452,7 +476,7 @@ class GoulyCard extends HTMLElement {
           (preset) => `
           <div class="item">
             <button class="label" data-favourite="${esc(preset)}">${esc(preset)}</button>
-            <button class="star on" data-unstar="${esc(preset)}" title="Remove from favourites">
+            <button class="star on" data-star="${esc(preset)}" title="Remove from favourites">
               <ha-icon icon="mdi:star"></ha-icon>
             </button>
           </div>`
@@ -502,7 +526,7 @@ class GoulyCard extends HTMLElement {
                     <button class="label ${option === selected ? "active" : ""}" data-preset="${esc(option)}">${esc(
                   option
                 )}</button>
-                    <button class="star ${starred ? "on" : ""}" data-${starred ? "unstar" : "star"}="${esc(
+                    <button class="star ${starred ? "on" : ""}" data-star="${esc(
                   preset
                 )}" title="${starred ? "Remove from favourites" : "Add to favourites"}">
                       <ha-icon icon="${starred ? "mdi:star" : "mdi:star-outline"}"></ha-icon>
@@ -566,12 +590,16 @@ class GoulyCard extends HTMLElement {
         option: item.dataset.folder,
       });
     });
-    on("[data-star]", (item) =>
-      this._call("gouly", "add_favourite", { entity_id: this._config.entity, preset: item.dataset.star })
-    );
-    on("[data-unstar]", (item) =>
-      this._call("gouly", "remove_favourite", { entity_id: this._config.entity, preset: item.dataset.unstar })
-    );
+    // One handler for both: which way it goes depends on the favourites as they are now, not as
+    // they were when the button was drawn.
+    on("[data-star]", (item) => {
+      const preset = item.dataset.star;
+      const starred = favouritesOf(this._light).includes(preset);
+      this._call("gouly", starred ? "remove_favourite" : "add_favourite", {
+        entity_id: this._config.entity,
+        preset,
+      });
+    });
   }
 }
 
