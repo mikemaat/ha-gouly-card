@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.0.4";
+const VERSION = "6.0.5";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -27,14 +27,14 @@ const LIGHT_COLUMN_WIDTH = 320;
 
 const STYLES = `
   .content { padding: 0 24px 24px; }
-  .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 8px 0 16px; }
+  .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 8px 0 20px; }
   /* Side by side, the columns separate things; a rule across the top just looks odd. */
   .content.wide .divider { display: none; }
   .content.wide { padding: 0; }
 
   .speed {
     /* Home Assistant's Effect button sits right above this; it needs room. */
-    display: flex; align-items: center; gap: 12px; margin: 20px 0 8px; padding-right: 6px;
+    display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; padding-right: 6px;
     font-size: 13px; color: var(--secondary-text-color);
   }
   .speed input[type="range"] { flex: 1; accent-color: var(--primary-color, #03a9f4); }
