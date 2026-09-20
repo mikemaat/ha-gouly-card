@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.0.5";
+const VERSION = "6.0.6";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -31,6 +31,8 @@ const STYLES = `
   /* Side by side, the columns separate things; a rule across the top just looks odd. */
   .content.wide .divider { display: none; }
   .content.wide { padding: 0; }
+  /* The speed has a host of its own; its padding would stack on the slider's own margin. */
+  .content.flush { padding-bottom: 0; }
 
   .speed {
     /* Home Assistant's Effect button sits right above this; it needs room. */
@@ -265,7 +267,7 @@ class GoulyCard extends HTMLElement {
     if (container.querySelector(".gouly-extras")) return;
 
     // Two shadow roots: the speed belongs with the light controls, the rest is our section.
-    this._speedRoot = this._makeHost(container, "gouly-speed", `<div id="speed"></div>`);
+    this._speedRoot = this._makeHost(container, "gouly-speed", `<div id="speed"></div>`, "flush");
     this._presetsRoot = this._makeHost(
       container,
       "gouly-extras",
@@ -278,11 +280,11 @@ class GoulyCard extends HTMLElement {
     this._render();
   }
 
-  _makeHost(container, className, inner) {
+  _makeHost(container, className, inner, contentClass = "") {
     const host = document.createElement("div");
     host.className = className;
     const root = host.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>${STYLES}</style><div class="content">${inner}</div>`;
+    root.innerHTML = `<style>${STYLES}</style><div class="content ${contentClass}">${inner}</div>`;
     container.appendChild(host);
     return root;
   }
