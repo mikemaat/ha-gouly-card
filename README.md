@@ -1,7 +1,12 @@
 # Gouly Card
 
-A Lovelace card for [ha-gouly](https://github.com/mikemaat/ha-gouly): one compact row on your
-dashboard, with colour, brightness, effects, presets and favourites behind a single tap.
+A Lovelace card for the [ha-gouly](https://github.com/mikemaat/ha-gouly) integration: one compact
+row on your dashboard, with colour, brightness, effects, presets and favourites behind a single tap.
+
+The integration is what talks to your lights, and it works on its own - Home Assistant's own light
+dialog, an effect list and a preset selector all come with it. This card exists because picking
+from 2,600 presets through a dropdown is miserable. It's optional, and nothing you build on the
+integration depends on it.
 
 > Not affiliated with or endorsed by Gouly.
 
@@ -28,6 +33,11 @@ since Home Assistant reuses that dialog for every entity.
 It drives the entities the integration already creates, so there's nothing extra to configure.
 
 ## Install
+
+First install the [ha-gouly](https://github.com/mikemaat/ha-gouly) integration and add your lights.
+This card shows the entities that integration creates, so on its own it has nothing to show.
+Version **0.7.0 or newer** is recommended: older versions reload the whole integration whenever you
+star a preset.
 
 **With HACS**
 
@@ -60,7 +70,6 @@ entities from the same device.
 | `select_preset_folder` | found automatically | Preset folder select entity |
 | `select_preset` | found automatically | Preset select entity |
 | `number_effect_speed` | found automatically | Effect speed number entity |
-| `button_add_preset_to_favourites` | found automatically | Favourite button entity |
 
 ## License
 
