@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.0.7";
+const VERSION = "6.0.8";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -30,7 +30,9 @@ const STYLES = `
   .divider { height: 1px; background: rgba(var(--rgb-primary-text-color, 255,255,255), .08); margin: 8px 0 20px; }
   /* Side by side, the columns separate things; a rule across the top just looks odd. */
   .content.wide .divider { display: none; }
-  .content.wide { padding: 0; }
+  /* Beside the light controls the left padding is the column gap, but the right edge is the
+     dialog's, so it keeps the dialog's own padding. */
+  .content.wide { padding: 0 24px 24px 0; }
   /* The speed has a host of its own; its padding would stack on the slider's own margin. */
   .content.flush { padding-bottom: 0; }
 
