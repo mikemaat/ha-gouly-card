@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.0.8";
+const VERSION = "6.1.0";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -303,8 +303,11 @@ class GoulyCard extends HTMLElement {
     const info = container.querySelector("ha-more-info-info");
     if (!info) return;
 
+    // Each column scrolls on its own: stretched to the container's height, they only get one
+    // when the dialog has stopped growing, so a short dialog still behaves as it did.
+    const column = `min-width: 0; min-height: 0; overflow-y: auto;`;
     const left = document.createElement("div");
-    left.style.cssText = `flex: 0 0 ${LIGHT_COLUMN_WIDTH}px; min-width: 0;`;
+    left.style.cssText = `flex: 0 0 ${LIGHT_COLUMN_WIDTH}px; ${column}`;
     container.insertBefore(left, info);
     left.append(info, this._speedRoot.host);
 
@@ -313,8 +316,13 @@ class GoulyCard extends HTMLElement {
       info: [info, info.getAttribute("style")],
       left,
     };
-    Object.assign(container.style, { display: "flex", alignItems: "flex-start", gap: "16px" });
-    Object.assign(this._presetsRoot.host.style, { flex: "1", minWidth: "0" });
+    Object.assign(container.style, {
+      display: "flex",
+      alignItems: "stretch",
+      gap: "16px",
+      minHeight: "0",
+    });
+    this._presetsRoot.host.style.cssText = `flex: 1; ${column}`;
     this._presetsRoot.querySelector(".content").classList.add("wide");
 
     // The sheet's width comes from a custom property on the Web Awesome dialog that Home
