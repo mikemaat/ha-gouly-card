@@ -15,7 +15,7 @@
  * Only `entity` is required; the rest are found from the same device.
  */
 
-const VERSION = "6.1.0";
+const VERSION = "6.1.1";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
@@ -304,18 +304,22 @@ class GoulyCard extends HTMLElement {
     if (!info) return;
 
     // Each column scrolls on its own: stretched to the container's height, they only get one
-    // when the dialog has stopped growing, so a short dialog still behaves as it did.
+    // when the dialog has stopped growing, so a short dialog still behaves as it did. The column
+    // is a flex column so the controls keep their own height inside it - given a definite one to
+    // measure against they overflow their box and paint over the speed slider.
     const column = `min-width: 0; min-height: 0; overflow-y: auto;`;
-    const left = document.createElement("div");
-    left.style.cssText = `flex: 0 0 ${LIGHT_COLUMN_WIDTH}px; ${column}`;
-    container.insertBefore(left, info);
-    left.append(info, this._speedRoot.host);
-
+    // Recorded before anything is changed: this dialog is Home Assistant's and gets reused.
     this._restore = {
       container: [container, container.getAttribute("style")],
       info: [info, info.getAttribute("style")],
-      left,
     };
+    const left = document.createElement("div");
+    left.style.cssText = `flex: 0 0 ${LIGHT_COLUMN_WIDTH}px; display: flex; flex-direction: column; ${column}`;
+    container.insertBefore(left, info);
+    left.append(info, this._speedRoot.host);
+    Object.assign(info.style, { flex: "0 0 auto", height: "auto", minHeight: "auto" });
+
+    this._restore.left = left;
     Object.assign(container.style, {
       display: "flex",
       alignItems: "stretch",
