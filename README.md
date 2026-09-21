@@ -10,11 +10,13 @@ integration depends on it.
 
 > Not affiliated with or endorsed by Gouly.
 
-![The card's layout: a row on the dashboard, and the dialog it opens](layout.png)
-
-*Illustration of the layout.*
+![The dialog the card opens: light controls and effect speed on the left, favourites and presets on the right](https://raw.githubusercontent.com/mikemaat/ha-gouly-card/main/screenshot.png)
 
 ## What it does
+
+![The card's layout: a row on the dashboard, and the dialog it opens](https://raw.githubusercontent.com/mikemaat/ha-gouly-card/main/layout.png)
+
+*Illustration of the layout.*
 
 The row is Home Assistant's own tile card, so it matches the rest of your dashboard. Tapping the
 icon toggles the light; tapping the rest opens **Home Assistant's own more-info dialog** - the same
