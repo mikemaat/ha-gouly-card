@@ -8,11 +8,12 @@
  *
  * Uses the entities created by the ha-gouly integration:
  *   light.*                   the light
- *   select.*_preset_folder    preset folder
- *   select.*_preset           preset in that folder
- *   number.*_effect_speed     effect speed
+ *   select (preset_folder)    preset folder
+ *   select (preset)           preset in that folder
+ *   number (effect_speed)     effect speed
  *
- * Only `entity` is required; the rest are found from the same device.
+ * Only `entity` is required; the rest are found on the same device by their translation key,
+ * which stays put when the integration renames an entity (its entity id doesn't).
  */
 
 const VERSION = "6.2.1";
@@ -186,15 +187,19 @@ class GoulyCard extends HTMLElement {
     return this._hass?.states[this._config.entity];
   }
 
-  _sibling(kind, suffix) {
-    const configured = this._config[`${kind}_${suffix}`] || this._config[suffix];
+  _sibling(kind, key) {
+    const configured = this._config[`${kind}_${key}`] || this._config[key];
     if (configured) return this._hass.states[configured];
     const entities = this._hass.entities || {};
     const deviceId = entities[this._config.entity]?.device_id;
     if (!deviceId) return undefined;
-    const match = Object.keys(entities).find(
-      (id) => id.startsWith(`${kind}.`) && id.endsWith(suffix) && entities[id].device_id === deviceId
+    const ids = Object.keys(entities).filter(
+      (id) => id.startsWith(`${kind}.`) && entities[id].device_id === deviceId
     );
+    // The translation key; failing that, the entity id ending the integration first gave it.
+    const match =
+      ids.find((id) => entities[id].platform === "gouly" && entities[id].translation_key === key) ||
+      ids.find((id) => id.endsWith(`_${key}`));
     return match ? this._hass.states[match] : undefined;
   }
 

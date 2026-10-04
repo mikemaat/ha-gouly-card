@@ -62,7 +62,7 @@ entity: light.christmas_lights_front
 ```
 
 `entity` is the only required option. The card finds the preset, effect speed and favourite
-entities from the same device.
+entities from the same device, whatever they're named.
 
 | Option | Default | What it does |
 |---|---|---|
@@ -70,7 +70,7 @@ entities from the same device.
 | `name` | the light's name | Title shown on the row and dialog |
 | `icon` | `mdi:snowflake` | Icon on the row; tap it to toggle the light |
 | `select_preset_folder` | found automatically | Preset folder select entity |
-| `select_preset` | found automatically | Preset select entity |
+| `select_preset` | found automatically | Preset name select entity |
 | `number_effect_speed` | found automatically | Effect speed number entity |
 
 ## License
