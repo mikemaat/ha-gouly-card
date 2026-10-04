@@ -16,7 +16,7 @@
  * which stays put when the integration renames an entity (its entity id doesn't).
  */
 
-const VERSION = "6.2.1";
+const VERSION = "6.2.2";
 const DEFAULT_ICON = "mdi:snowflake";
 const MORE_INFO_DIALOG = "ha-more-info-dialog";
 
